@@ -2,226 +2,180 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Customer Resolution Agent — Architecture</title>
+<title>Architecture — Customer Resolution Agent</title>
 <style>
-  :root {
-    --indigo: #001871; --link: #2447c5; --ink: #1f2533; --muted: #5b6472;
-    --line: #e1e6f0; --panel: #f5f7fb;
-  }
-  * { box-sizing: border-box; margin: 0; }
+  @page { size: A4 landscape; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 297mm; height: 210mm; }
   body {
-    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
-    color: var(--ink); background: #fff; font-size: 12.5px; line-height: 1.5;
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #16204a;
+    background: #ffffff;
+    padding: 7mm 8mm;
+    display: flex; flex-direction: column; gap: 3.2mm;
   }
-  .page { max-width: 860px; margin: 0 auto; padding: 34px 40px; }
-  @media print {
-    @page { margin: 12mm; }
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .page { page-break-after: always; padding: 0; max-width: none; }
-    .page:last-child { page-break-after: auto; }
+  .hdr { display: flex; align-items: baseline; gap: 4mm; border-bottom: 2.5px solid #001871; padding-bottom: 2mm; }
+  .hdr h1 { font-size: 15.5px; color: #001871; letter-spacing: 0.01em; }
+  .hdr .sub { font-size: 8.6px; color: #55618f; }
+  .hdr .live { margin-left: auto; text-align: right; font-size: 8.2px; color: #55618f; line-height: 1.45; }
+  .hdr .live b { color: #001871; }
+  .hdr .live .url { font-family: Consolas, monospace; font-size: 8.4px; color: #0d47c2; }
+
+  /* ---- flow diagram ---- */
+  .flow { display: flex; align-items: stretch; gap: 0; }
+  .fbox {
+    flex: 1; border: 1.4px solid #c9d4ee; border-radius: 8px; padding: 2mm 2.2mm;
+    background: #f7f9ff; display: flex; flex-direction: column; gap: 0.8mm; min-width: 0;
   }
-  h1 { font-size: 21px; font-weight: 650; letter-spacing: -0.01em; color: var(--indigo); }
-  .sub { color: var(--muted); font-size: 12.5px; margin: 3px 0 16px; }
-  h2 {
-    font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
-    color: var(--link); margin: 16px 0 7px;
+  .fbox.hot { background: #001871; border-color: #001871; color: #fff; }
+  .fbox.hot .ft, .fbox.hot li { color: #fff; }
+  .fbox.warn { background: #fff8e8; border-color: #e2b93b; }
+  .ft { font-size: 9.3px; font-weight: 700; color: #001871; }
+  .fbox ul { list-style: none; }
+  .fbox li { font-size: 7.6px; line-height: 1.45; color: #3c486e; }
+  .fbox li b { color: inherit; }
+  .arr { align-self: center; font-size: 13px; color: #001871; padding: 0 1.2mm; font-weight: 700; }
+  .arr small { display: block; font-size: 6.4px; color: #55618f; text-align: center; font-weight: 400; }
+
+  .duo { display: flex; gap: 3.2mm; }
+  .duo > div { flex: 1; }
+
+  /* ---- cards ---- */
+  .grid { display: flex; gap: 3.2mm; flex: 1; }
+  .card { flex: 1; border: 1.2px solid #dde5f5; border-radius: 8px; padding: 2mm 2.4mm; min-width: 0; }
+  .card h2 {
+    font-size: 8.8px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: #001871; border-bottom: 1px solid #e8edf9; padding-bottom: 1mm; margin-bottom: 1.2mm;
   }
-  p { margin-bottom: 6px; }
-  b { font-weight: 650; }
-  code {
-    font-family: Consolas, "Cascadia Mono", monospace; font-size: 11px;
-    background: var(--panel); padding: 0 4px; border-radius: 3px;
-  }
-  .principle {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 4px 0 2px;
-  }
-  .principle div {
-    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--indigo);
-    border-radius: 6px; padding: 7px 10px; font-size: 11.5px;
-  }
-  .principle b { display: block; color: var(--indigo); font-size: 11.5px; }
-  .stack { display: grid; grid-template-columns: 1fr 200px; gap: 14px; align-items: start; margin-top: 4px; }
-  .layers { display: flex; flex-direction: column; gap: 0; }
-  .layer {
-    border: 1px solid var(--line); border-radius: 7px; padding: 6px 12px;
-    background: #fff; display: flex; gap: 10px; align-items: baseline;
-  }
-  .layer b { color: var(--indigo); white-space: nowrap; font-size: 12px; }
-  .layer span { color: var(--muted); font-size: 11.5px; }
-  .down { text-align: center; color: var(--muted); font-size: 11px; line-height: 1.1; padding: 1px 0; }
-  .side {
-    border: 1px dashed var(--link); border-radius: 7px; padding: 8px 11px;
-    background: var(--panel); font-size: 11.5px; color: var(--ink);
-  }
-  .side b { color: var(--indigo); display: block; margin-bottom: 3px; }
-  ul { padding-left: 18px; margin-bottom: 6px; }
-  li { margin-bottom: 3.5px; }
-  .kv { color: var(--muted); }
-  .talk { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-top: 12px; }
-  .talk li { margin-bottom: 5px; }
-  svg { width: 100%; height: auto; display: block; margin-top: 10px; }
+  .card p, .card li { font-size: 7.7px; line-height: 1.5; color: #2c3860; }
+  .card ul { list-style: none; }
+  .card li { padding-left: 2.6mm; position: relative; margin-bottom: 0.6mm; }
+  .card li::before { content: "▪"; position: absolute; left: 0; color: #0d47c2; font-size: 7px; }
+  .mono { font-family: Consolas, monospace; font-size: 7.3px; color: #0d47c2; }
+  .pill { display: inline-block; background: #eef3ff; color: #001871; border-radius: 999px; padding: 0.2mm 1.6mm; font-size: 6.8px; font-weight: 600; margin: 0 0.4mm 0.5mm 0; }
+  .good { color: #0c7a43; font-weight: 700; }
+  .bad { color: #b3261e; font-weight: 700; }
+
+  .ftr { display: flex; gap: 4mm; border-top: 1.5px solid #e8edf9; padding-top: 1.4mm; }
+  .ftr div { font-size: 7.2px; color: #55618f; line-height: 1.5; }
 </style>
 </head>
 <body>
 
-<!-- ==================== PAGE 1 — ARCHITECTURE ==================== -->
-<section class="page">
-  <h1>Customer Resolution Agent — Architecture</h1>
-  <p class="sub">Airline disruption resolution (AIONOS Assignment 3) · grounded only in the supplied data pack · Node.js, zero-dependency core</p>
-
-  <h2>Core principle</h2>
-  <div class="principle">
-    <div><b>LLM</b>conversation &amp; reasoning</div>
-    <div><b>Tools</b>retrieve facts, execute actions</div>
-    <div><b>Policy engine</b>enforces rules in code</div>
-    <div><b>Human handoff</b>safety boundary</div>
+<div class="hdr">
+  <h1>✈ Customer Resolution Agent — SK Airways</h1>
+  <span class="sub">AIONOS Assignment 3 · agentic AI grounded ONLY in the data pack · Wed 23 Sep 2026 (disruption day)</span>
+  <div class="live">
+    <div><b>Live:</b> <span class="url">customer-resolution-agent-ica7.onrender.com</span> &nbsp;·&nbsp; <b>Repo:</b> <span class="url">github.com/utkarshalpha/customer-resolution-agent</span></div>
+    <div><b>94 offline tests</b> (56 scenario + 38 policy-layer) · zero-dependency Node 18+ · auto-deploys on every push</div>
   </div>
-  <p class="kv" style="margin-top:6px">The model never decides entitlements. It requests actions; deterministic code computes eligibility from the data pack and either executes or returns the blocking rule, which the agent must relay and escalate.</p>
+</div>
 
-  <h2>System layers</h2>
-  <div class="stack">
-    <div class="layers">
-      <div class="layer"><b>1 · Chat UI</b><span>chat + suggested replies · live policy trace console · action ledger · Case-ID chip · resolution cards <code>index.html app.js</code></span></div>
-      <div class="down">▼ &nbsp;REST (/api/session · /api/message · /api/cases)</div>
-      <div class="layer"><b>2 · API server</b><span>session store · Case IDs (CASE-20260923-NNNN) · audit ledger · provider auto-detection <code>server.js</code></span></div>
-      <div class="down">▼ &nbsp;one behaviour contract, two runners</div>
-      <div class="layer"><b>3 · Agent runtime</b><span>tool-use loop: model → tool → result → repeat · legal-threat guard · retries <code>agent.js agent-openai.js</code></span></div>
-      <div class="down">▼ &nbsp;9 strict-schema tools — the only way to act</div>
-      <div class="layer"><b>4 · Policy engine</b><span>deterministic rule checks the model cannot bypass · identity gate · idempotent actions · trace events <code>policy.js</code></span></div>
-      <div class="down">▼ &nbsp;verbatim retrieval, verified customer only</div>
-      <div class="layer"><b>5 · Knowledge &amp; data</b><span>§3/§4 rules as retrievable chunks with section ids · customers/bookings as seed data <code>kb.js engine.js</code></span></div>
-    </div>
-    <div>
-      <div class="side"><b>Human-in-the-loop</b>Support console: every case with its ledger and escalation tickets (beyond-policy asks, ₹1,500+ waivers, legal threats). A person reviews and marks tickets handled. <code>admin.html</code></div>
-      <div class="side" style="margin-top:10px"><b>LLM providers</b>Auto-detected at startup: Claude → Groq → Gemini → OpenRouter → custom → keyless free endpoint → rules engine. The demo always runs, key or no key.</div>
-      <div class="side" style="margin-top:10px"><b>Verification</b>91 automated checks: 56 scenario/guardrail + 35 policy-layer. No API key needed. <code>npm test</code></div>
-    </div>
-  </div>
-
-  <h2>The nine tools (policy-enforced)</h2>
-  <p><code>verify_identity</code> <code>search_policy</code> <code>get_booking_details</code> · <code>issue_delay_compensation</code> <code>rebook_free</code> <code>initiate_refund</code> <code>quote_fare_difference</code> <code>rebook_paid_alternative</code> · <code>escalate_to_human</code></p>
-
-  <h2>Rules enforced in code (from the data pack)</h2>
-  <ul>
-    <li><b>Delay tiers:</b> &lt;3h → ₹500 meal voucher · &gt;3h → + lounge access · &gt;5h → + hotel for the <i>delayed hours only</i>, never a full night.</li>
-    <li><b>Cancellation:</b> customer's choice — free rebooking within 24h (Gold/Platinum priority) or full refund in 7 business days, original payment method only.</li>
-    <li><b>Fare difference:</b> voluntary move to a higher fare is payable; above ₹1,500 the agent cannot waive — supervisor escalation (Meher's ₹2,000 case).</li>
-    <li><b>Loyalty:</b> priority rebooking only — no extra compensation; free upgrades are beyond policy → escalated, never approved.</li>
-    <li><b>Hard boundaries:</b> legal threats escalate immediately; non-airline disruptions get no exceptions; unverified sessions cannot touch any account action.</li>
-  </ul>
-</section>
-
-<!-- ==================== PAGE 2 — SEQUENCE DIAGRAM ==================== -->
-<section class="page">
-  <h1>Sequence — identity → grounded resolution → guardrail → human</h1>
-  <p class="sub">Priya's scenario end-to-end: verification, in-policy refund executed, beyond-policy upgrade escalated. Solid = call · dashed = response.</p>
-
-  <svg viewBox="0 0 1000 880" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
-    <defs>
-      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M0 0 L10 5 L0 10 z" fill="#1f2533"/>
-      </marker>
-      <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M0 0 L10 5 L0 10 z" fill="#5b6472"/>
-      </marker>
-    </defs>
-
-    <!-- phase bands -->
-    <rect x="0" y="160" width="1000" height="342" fill="#f5f7fb"/>
-    <rect x="0" y="506" width="1000" height="262" fill="#eef2fc"/>
-    <rect x="0" y="772" width="1000" height="76" fill="#f5f7fb"/>
-    <text x="8" y="174" font-size="9" letter-spacing="1.5" fill="#2447c5" font-weight="700">IDENTITY &amp; GROUNDED RESOLUTION</text>
-    <text x="8" y="520" font-size="9" letter-spacing="1.5" fill="#2447c5" font-weight="700">GUARDRAIL — IN-POLICY EXECUTED, BEYOND-POLICY ESCALATED</text>
-    <text x="8" y="786" font-size="9" letter-spacing="1.5" fill="#2447c5" font-weight="700">HUMAN-IN-THE-LOOP</text>
-
-    <!-- lifelines -->
-    <g stroke="#99a3b8" stroke-dasharray="3 4">
-      <line x1="70"  y1="72" x2="70"  y2="850"/><line x1="240" y1="72" x2="240" y2="850"/>
-      <line x1="410" y1="72" x2="410" y2="850"/><line x1="580" y1="72" x2="580" y2="850"/>
-      <line x1="750" y1="72" x2="750" y2="850"/><line x1="930" y1="72" x2="930" y2="850"/>
-    </g>
-    <g font-size="11" font-weight="650" text-anchor="middle">
-      <rect x="18"  y="34" width="104" height="38" rx="6" fill="#001871"/><text x="70"  y="51" fill="#fff">Customer</text><text x="70" y="65" fill="#c9d4ee" font-size="9" font-weight="400">chat UI</text>
-      <rect x="188" y="34" width="104" height="38" rx="6" fill="#001871"/><text x="240" y="51" fill="#fff">API server</text><text x="240" y="65" fill="#c9d4ee" font-size="9" font-weight="400">server.js</text>
-      <rect x="358" y="34" width="104" height="38" rx="6" fill="#001871"/><text x="410" y="51" fill="#fff">Agent (LLM)</text><text x="410" y="65" fill="#c9d4ee" font-size="9" font-weight="400">tool-use loop</text>
-      <rect x="528" y="34" width="104" height="38" rx="6" fill="#001871"/><text x="580" y="51" fill="#fff">Policy engine</text><text x="580" y="65" fill="#c9d4ee" font-size="9" font-weight="400">policy.js</text>
-      <rect x="698" y="34" width="104" height="38" rx="6" fill="#001871"/><text x="750" y="51" fill="#fff">Knowledge</text><text x="750" y="65" fill="#c9d4ee" font-size="9" font-weight="400">kb.js · data</text>
-      <rect x="878" y="34" width="104" height="38" rx="6" fill="#001871"/><text x="930" y="51" fill="#fff">Human</text><text x="930" y="65" fill="#c9d4ee" font-size="9" font-weight="400">support console</text>
-    </g>
-
-    <!-- messages: solid = call, dashed = response -->
-    <g font-size="10.5" fill="#1f2533">
-      <line x1="70" y1="100" x2="238" y2="100" stroke="#1f2533" marker-end="url(#a)"/>
-      <text x="154" y="93" text-anchor="middle">POST /api/session (new customer)</text>
-
-      <line x1="240" y1="138" x2="72" y2="138" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
-      <text x="154" y="131" text-anchor="middle" fill="#5b6472">Case ID + unverified greeting</text>
-
-      <line x1="70" y1="192" x2="238" y2="192" stroke="#1f2533" marker-end="url(#a)"/>
-      <text x="154" y="185" text-anchor="middle">“Flight cancelled” + PNR SK4821X</text>
-
-      <line x1="240" y1="230" x2="408" y2="230" stroke="#1f2533" marker-end="url(#a)"/>
-      <text x="324" y="223" text-anchor="middle">run turn (unverified prompt)</text>
-
-      <line x1="410" y1="268" x2="578" y2="268" stroke="#1f2533" marker-end="url(#a)"/>
-      <text x="494" y="261" text-anchor="middle">verify_identity(“SK4821X”)</text>
-
-      <line x1="580" y1="306" x2="748" y2="306" stroke="#1f2533" marker-end="url(#a)"/>
-      <text x="664" y="299" text-anchor="middle">match booking · load profile</text>
-
-      <line x1="750" y1="344" x2="582" y2="344" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
-      <text x="664" y="337" text-anchor="middle" fill="#5b6472">Priya Nair · Gold · SK-204 cancelled</text>
-
-      <line x1="580" y1="382" x2="412" y2="382" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
-      <text x="494" y="375" text-anchor="middle" fill="#5b6472">allowed ✓ — customer bound</text>
-
-      <line x1="410" y1="420" x2="578" y2="420" stroke="#1f2533" marker-end="url(#a)"/>
-      <text x="494" y="413" text-anchor="middle">search_policy(“cancellation options”)</text>
-
-      <line x1="580" y1="452" x2="412" y2="452" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
-      <text x="494" y="445" text-anchor="middle" fill="#5b6472">verbatim §3 rule + section id</text>
-
-      <line x1="410" y1="488" x2="72" y2="488" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
-      <text x="240" y="481" text-anchor="middle" fill="#5b6472">“Free rebooking ≤24h or full refund — your choice”</text>
-
-      <line x1="70" y1="540" x2="408" y2="540" stroke="#1f2533" marker-end="url(#a)"/>
-      <text x="240" y="533" text-anchor="middle">“Refund — plus a free business-class upgrade” (via server)</text>
-
-      <line x1="410" y1="578" x2="578" y2="578" stroke="#1f2533" marker-end="url(#a)"/>
-      <text x="494" y="571" text-anchor="middle">initiate_refund()</text>
-
-      <line x1="580" y1="616" x2="412" y2="616" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
-      <text x="494" y="609" text-anchor="middle" fill="#5b6472">✓ RFD-9001 · 7 days · original method</text>
-
-      <line x1="410" y1="654" x2="578" y2="654" stroke="#1f2533" marker-end="url(#a)"/>
-      <text x="494" y="647" text-anchor="middle">escalate_to_human(beyond_policy)</text>
-
-      <line x1="580" y1="692" x2="412" y2="692" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
-      <text x="494" y="685" text-anchor="middle" fill="#5b6472">ticket ESC-7001 — upgrade never approved</text>
-
-      <line x1="410" y1="740" x2="72" y2="740" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
-      <text x="240" y="733" text-anchor="middle" fill="#5b6472">refund confirmed + upgrade escalated (resolution card, Case ID)</text>
-
-      <line x1="240" y1="800" x2="928" y2="800" stroke="#1f2533" marker-end="url(#a)"/>
-      <text x="584" y="793" text-anchor="middle">case + ESC-7001 appear in support console</text>
-
-      <line x1="930" y1="836" x2="242" y2="836" stroke="#1f2533" marker-end="url(#a)"/>
-      <text x="584" y="829" text-anchor="middle">mark ESC-7001 handled</text>
-    </g>
-
-    <text x="8" y="872" font-size="9.5" fill="#5b6472">Every arrow into the policy engine emits an audit event: policy trace (Allowed / Blocked / Supervisor / Escalated), ledger entry, or ticket — all tied to the Case ID.</text>
-  </svg>
-
-  <div class="talk">
-    <h2 style="margin-top:0">If you have to explain it in three sentences</h2>
+<!-- ================= FLOW ================= -->
+<div class="flow">
+  <div class="fbox">
+    <div class="ft">1 · Customer (browser SPA)</div>
     <ul>
-      <li><b>The LLM never decides entitlements</b> — it requests tools; the policy engine computes eligibility from the data pack and either executes or returns the blocking rule (a hotel on a 4-hour delay is refused <i>by code</i>, with the “&gt;5 hours” rule attached).</li>
-      <li><b>Everything is auditable</b> — each turn emits a policy trace, ledger ids (VCH/LNG/HTL/RFD/RBK) and tickets (ESC), tied to a Case ID and visible live in both consoles.</li>
-      <li><b>Escalation is the boundary, not a failure</b> — beyond-policy asks, waivers above ₹1,500 and legal threats route to a human immediately; the agent never approves outside policy and never promises an outcome.</li>
+      <li>Login — type a name/PNR, profile suggests itself</li>
+      <li>Dashboard — boarding passes, live case feed, agent actions</li>
+      <li>Chat with <b>Aria</b> — typewriter replies, suggestion chips; card taps only <i>stage</i> text, never auto-send</li>
+      <li>Voice overlay — orb, synced subtitles, mic</li>
     </ul>
   </div>
-</section>
+  <div class="arr">▶<small>HTTP<br>JSON</small></div>
+  <div class="fbox">
+    <div class="ft">2 · Node server (server.js)</div>
+    <ul>
+      <li><span class="mono">/api/session · /api/message</span> — case per chat (CASE-ID)</li>
+      <li><span class="mono">/api/tts · /api/stt</span> — voice proxy, key stays server-side</li>
+      <li><span class="mono">/api/decide · /api/notices</span> — supervisor loop</li>
+      <li><span class="mono">/api/mycases · /api/record</span> — feed + downloadable record</li>
+      <li>Append-only audit log <span class="mono">data/audit.jsonl</span> — replayed on boot</li>
+    </ul>
+  </div>
+  <div class="arr">▶<small>agent<br>loop</small></div>
+  <div class="fbox">
+    <div class="ft">3 · LLM — the conversation</div>
+    <ul>
+      <li><b>Groq GPT-OSS 120B</b> (tool-calling loop, retries honour rate limits)</li>
+      <li>Fallback chain: Claude → Gemini → OpenRouter → keyless pollinations → rules engine — demo always works</li>
+      <li>System prompt = ONLY the verified customer + 5 rules + tone samples; other passengers never in context</li>
+    </ul>
+  </div>
+  <div class="arr">▶<small>9 tools<br>only</small></div>
+  <div class="fbox hot">
+    <div class="ft">4 · Policy engine (policy.js) — code the model cannot bypass</div>
+    <ul>
+      <li>verify_identity · search_policy · get_booking_details · issue_delay_compensation · rebook_free · initiate_refund · quote_fare_difference · rebook_paid_alternative · escalate_to_human</li>
+      <li>Every call re-checked against §3/§4 in code — disallowed → <b>does not execute</b>, returns the rule</li>
+      <li>Nothing before identity verification · legal threats force instant escalation</li>
+    </ul>
+  </div>
+  <div class="arr">▶<small>beyond<br>policy</small></div>
+  <div class="fbox warn">
+    <div class="ft">5 · Human supervisor (/admin)</div>
+    <ul>
+      <li>Resolution Console — all cases, transcripts, open tickets</li>
+      <li><b>Approve / Deny</b> → notice lands back in the customer chat ≤ 4 s</li>
+      <li>Approved ₹2,000 waiver <b>executes the rebooking through the same policy layer</b> — closed loop</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================= DETAIL ================= -->
+<div class="grid">
+  <div class="card">
+    <h2>Voice — a real two-way conversation</h2>
+    <ul>
+      <li>Mic → MediaRecorder + RMS <b>silence detector</b> (0.9 s ends your sentence)</li>
+      <li><span class="mono">/api/stt</span> → Groq <b>Whisper large-v3-turbo</b> transcribes</li>
+      <li>Transcript → same policy-checked agent → reply</li>
+      <li><span class="mono">/api/tts</span> → Groq <b>Orpheus</b> natural voice; subtitles synced to audio time; browser speech as fallback</li>
+      <li><b>Self-healing:</b> per-reply time budget + 2 s watchdog re-arms the mic — a lost audio callback can never freeze the loop; closing voice releases the mic hardware</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>Service rules enforced (§3)</h2>
+    <ul>
+      <li><b>Cancelled by airline</b> → free rebooking ≤ 24 h OR full refund — customer's choice</li>
+      <li><b>Delay</b>: &lt; 3 h → ₹500 meal voucher · &gt; 3 h → + lounge · &gt; 5 h → + hotel for the <b>delayed hours only</b> (never a full night)</li>
+      <li><b>Refunds</b>: 7 business days, original payment method ONLY</li>
+      <li><b>Fare difference</b>: customer pays; waiver &gt; ₹1,500 needs a supervisor</li>
+      <li><b>Gold/Platinum</b>: priority rebooking, NO extra compensation</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>Three scenarios (§6 outcomes)</h2>
+    <ul>
+      <li><b>Priya · Gold · SK-204 cancelled</b> → rebook free or refund; free upgrade "for the trouble" → <span class="bad">escalated, never approved</span></li>
+      <li><b>Arvind · Silver · SK-118 +4 h</b> → voucher + lounge; hotel <span class="bad">declined</span> (needs &gt; 5 h); "make an exception" → ticket</li>
+      <li><b>Meher · Platinum · SK-305 +6 h</b> → voucher + lounge + delayed-hours hotel (14:00–20:00); ₹2,000 higher-fare move → pay, <span class="good">supervisor waiver</span>, or wait</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>Why it can't go rogue</h2>
+    <ul>
+      <li><b>LLM talks, code decides</b> — actions exist only as tools; the policy layer re-derives every entitlement from the data pack</li>
+      <li>Only fare figure it can quote = what <span class="mono">quote_fare_difference</span> returns</li>
+      <li>Off-topic questions politely refused (KB-grounded); greetings/small talk allowed</li>
+      <li>Other passengers' data never enters the model's context — privacy by construction</li>
+      <li>Anger changes tone, never entitlements; escalation outcomes never promised</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>Record & delivery (non-negotiable)</h2>
+    <ul>
+      <li><b>Persistent audit log</b>: every message, action, ticket, decision appended live; survives restarts; <b>Download record</b> (JSON) per case</li>
+      <li>Agent console (opt-in drawer): live rule trace — Allowed / Blocked / Escalated per turn</li>
+      <li><b>Deploy</b>: Render free web service via one-click <span class="mono">render.yaml</span> blueprint (prompts for the Groq key); GitHub Pages static preview as fallback</li>
+      <li>Files: <span class="mono">server.js · policy.js · agent-openai.js · engine.js (data pack + rules) · kb.js · app.js · admin.js</span></li>
+    </ul>
+  </div>
+</div>
+
+<div class="ftr">
+  <div><b>One sentence:</b>&nbsp; A free LLM holds a natural conversation (text or voice), but every action must pass a deterministic policy engine built from the data pack — anything beyond policy becomes a ticket a human approves, and the decision flows back into the chat, with the whole exchange preserved in a permanent case record.</div>
+</div>
 
 </body>
 </html>
