@@ -1,0 +1,17 @@
+{
+  "name": "customer-resolution-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SK Airways customer-facing resolution agent (airline disruption) — AIONOS Assignment 3. Claude-powered agent with a deterministic policy layer, plus an offline rules-engine fallback.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js && node test-tools.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0"
+  }
+}

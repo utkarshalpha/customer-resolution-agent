@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SK Airways · Customer Resolution Agent</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'><path d='M2 20 L13 4 L16 9 L24 20 L16 16 L10 20 Z' fill='%23e2b84d'/></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="appbar">
+  <div class="brand">
+    <span class="logo-mark">
+      <svg width="16" height="16" viewBox="0 0 26 26" aria-hidden="true">
+        <path d="M2 20 L13 4 L16 9 L24 20 L16 16 L10 20 Z" fill="#ffffff"/>
+      </svg>
+    </span>
+    <span class="brand-name">SK Airways</span>
+    <span class="brand-sub">Customer support</span>
+  </div>
+  <div class="appbar-spacer"></div>
+  <span class="datechip">Wed 23 Sep 2026</span>
+  <button class="linkbtn" id="dataBtn" type="button">Data pack</button>
+  <button class="linkbtn" id="howBtn" type="button">How it works</button>
+</header>
+
+<!-- ============ Landing ============ -->
+<main id="landing">
+  <section class="hero">
+    <div class="hero-inner">
+      <span class="hero-tag">Support · Disruption assistance</span>
+      <h1>Flight disruption assistance</h1>
+      <p>
+        Rebooking, refunds and delay assistance for flights affected on Wednesday, 23 September 2026 —
+        handled strictly per airline policy. Anything outside policy goes to a human agent, and every
+        decision is auditable in the console beside the chat.
+      </p>
+    </div>
+  </section>
+
+  <div class="landing-body">
+    <p class="section-label">Choose a passenger to continue as</p>
+    <div class="cards" id="cards"></div>
+
+    <div class="landing-links">
+      <button class="textlink" id="dataBtn2" type="button">View the source data pack</button>
+      <button class="textlink" id="howBtn2" type="button">How this agent works</button>
+      <a class="textlink" href="/admin" target="_blank" rel="noopener">Support console (cases &amp; escalations) →</a>
+    </div>
+
+    <p class="landing-foot">
+      Demo for Assignment 3 — Customer-Facing Resolution Agent (AIONOS). Fictional airline and customers;
+      every rule and fact comes from the assignment data pack. Free-typed messages are matched to intents,
+      and the suggested replies walk each scripted scenario end-to-end.
+    </p>
+  </div>
+</main>
+
+<!-- ============ Chat workspace ============ -->
+<div class="workspace" id="chatView" hidden>
+  <section class="chatcol" aria-label="Conversation">
+    <div class="chathead">
+      <div class="who">
+        <div class="avatar" id="who-avatar"></div>
+        <span class="nm" id="who-name"></span>
+        <span class="tier" id="who-tier"></span>
+        <span class="pnr" id="who-pnr"></span>
+        <span class="pnr" id="who-case"></span>
+        <span class="mode" id="modeBadge"></span>
+      </div>
+      <div class="chathead-actions">
+        <button class="btn btn-sm console-toggle" id="consoleToggle" type="button">Console</button>
+        <button class="btn btn-sm" id="replayBtn" type="button">Auto-play</button>
+        <button class="btn btn-sm" id="restartBtn" type="button">Restart</button>
+        <button class="btn btn-sm" id="backBtn" type="button">Switch passenger</button>
+      </div>
+    </div>
+    <div class="esc-banner" id="escBanner">
+      Escalated — this case is now with the specialist support team; a human agent will contact the customer directly.
+    </div>
+    <div class="messages" id="messages" aria-live="polite">
+    </div>
+    <div class="typing" id="typing" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="chips" id="chips"></div>
+    <div class="inputrow">
+      <input id="userInput" type="text" autocomplete="off"
+             placeholder="Type as the customer — or tap a suggested message above" aria-label="Message">
+      <button class="btn btn-primary" id="sendBtn" type="button">Send</button>
+    </div>
+  </section>
+
+  <aside class="inspector" id="inspector" aria-label="Agent console">
+    <div class="insp-head">
+      <p class="insp-title">Agent console</p>
+      <div class="sub">Which rule produced each reply — grounded in the data pack only.</div>
+    </div>
+    <div class="insp-section">
+      <h3>Policy trace <span class="count-badge" id="traceCount">0</span></h3>
+      <div id="traceList"></div>
+    </div>
+    <div class="insp-section">
+      <h3>Actions on booking <span class="count-badge" id="ledgerCount">0</span></h3>
+      <div id="ledgerList"></div>
+    </div>
+    <div class="insp-section">
+      <h3>Escalations <span class="count-badge" id="escCount">0</span></h3>
+      <div id="escList"></div>
+    </div>
+  </aside>
+</div>
+
+<!-- ============ Data pack modal ============ -->
+<div class="overlay" id="dataOverlay" role="dialog" aria-modal="true" aria-label="Source data pack">
+  <div class="modal">
+    <h2>Source data pack</h2>
+    <p class="modal-sub">Assignment 3 — Customer-Facing Resolution Agent (Airline Disruption). The exercise is set on
+      <strong>Wednesday, 23 September 2026</strong>. The agent uses only the material below — no invented rules,
+      policies or customer information.</p>
+
+    <h3><span class="sec">§1</span>Customer profiles</h3>
+    <div class="tablewrap">
+      <table>
+        <tr><th>Customer</th><th>Tier</th><th>Booking ref</th><th>Contact</th><th>Travel history (12 months)</th></tr>
+        <tr><td>Priya Nair</td><td>Gold</td><td class="mono">SK4821X</td><td>priya.nair@example.com · +91-98xxxxxxx1</td>
+            <td>6 flights · 1 prior complaint (delayed baggage, resolved with voucher)</td></tr>
+        <tr><td>Arvind Kulkarni</td><td>Silver</td><td class="mono">TR1190B</td><td>arvind.kulkarni@example.com · +91-98xxxxxxx2</td>
+            <td>3 flights · no prior complaints</td></tr>
+        <tr><td>Meher Kaur</td><td>Platinum</td><td class="mono">WL7742</td><td>meher.kaur@example.com · +91-98xxxxxxx3</td>
+            <td>10 flights · 1 prior complaint (overbooking, resolved with a tier-status upgrade)</td></tr>
+      </table>
+    </div>
+
+    <h3><span class="sec">§2</span>Booking / transaction data</h3>
+    <div class="tablewrap">
+      <table>
+        <tr><th>Customer</th><th>PNR</th><th>Flight</th><th>Route</th><th>Date</th><th>Sched. dep.</th><th>Status</th></tr>
+        <tr><td>Priya Nair</td><td class="mono">SK4821X</td><td class="mono">SK-204</td><td>Delhi → Goa</td><td>Wed 23 Sep 2026</td><td class="mono">18:40</td><td><strong>Cancelled</strong> (operational reasons)</td></tr>
+        <tr><td>Priya Nair</td><td class="mono">SK4821X</td><td class="mono">Return</td><td>Goa → Delhi</td><td>Fri 25 Sep 2026</td><td class="mono">16:20</td><td>Unaffected</td></tr>
+        <tr><td>Arvind Kulkarni</td><td class="mono">TR1190B</td><td class="mono">SK-118</td><td>Mumbai → Bengaluru</td><td>Wed 23 Sep 2026</td><td class="mono">07:10</td><td>Delayed 4h (new departure 11:10)</td></tr>
+        <tr><td>Meher Kaur</td><td class="mono">WL7742</td><td class="mono">SK-305</td><td>Delhi → Hyderabad</td><td>Wed 23 Sep 2026</td><td class="mono">14:00</td><td>Delayed 6h (new departure 20:00)</td></tr>
+      </table>
+    </div>
+
+    <h3><span class="sec">§3</span>Service rules</h3>
+    <ul>
+      <li><strong>Cancellation Rebooking Rule:</strong> if a flight is cancelled by the airline, the customer is entitled to a free rebooking on the next available flight within 24 hours, <em>or</em> a full refund — the customer’s choice.</li>
+      <li><strong>Delay Compensation Rule:</strong> under 3 hours → ₹500 meal voucher · more than 3 hours → meal voucher + lounge access · more than 5 hours → meal voucher + hotel accommodation covering only the delayed hours (not a full night’s stay).</li>
+      <li><strong>Refund Processing Rule:</strong> refunds for airline-caused cancellations are processed in full within 7 business days, to the original payment method only.</li>
+      <li><strong>Fare Difference Rule:</strong> a voluntary rebooking onto a higher-fare flight (not airline-caused) means the customer pays the fare difference. Agents cannot waive differences above ₹1,500 without supervisor approval.</li>
+      <li><strong>Loyalty Tier Rule:</strong> Gold and Platinum get priority rebooking (first access to next-available seats) but no additional compensation beyond standard policy.</li>
+    </ul>
+
+    <h3><span class="sec">§4</span>Allowed vs. prohibited actions</h3>
+    <p><strong>Allowed:</strong></p>
+    <ul>
+      <li>Rebook on the next available flight within 24 hours at no charge (airline-caused disruption)</li>
+      <li>Issue meal vouchers and lounge access per the delay compensation rule</li>
+      <li>Arrange hotel accommodation for the delayed-hours portion, where the delay qualifies</li>
+      <li>Initiate a refund request for airline-caused cancellations</li>
+      <li>Provide the customer’s <em>own</em> booking and flight status information</li>
+    </ul>
+    <p><strong>Prohibited (must escalate to a human agent):</strong></p>
+    <ul>
+      <li>Approving any compensation beyond the stated policy amounts</li>
+      <li>Waiving a fare difference above ₹1,500</li>
+      <li>Making exceptions for non-airline-caused disruptions (e.g., customer missed the flight)</li>
+      <li>Handling threats of legal action or formal complaints — escalated immediately</li>
+      <li>Processing refunds to a different payment method than the original</li>
+    </ul>
+
+    <h3><span class="sec">§5</span>Tone reference</h3>
+    <p class="note">The agent’s voice follows the sample conversations in the pack: acknowledge the frustration,
+      state the facts from the booking data, offer the policy options, and — when something needs a human —
+      escalate warmly and immediately (“I want to make sure this gets the right attention…”). The samples are
+      tone reference only, never a source of policy or fact.</p>
+
+    <h3><span class="sec">§6</span>The three scenarios</h3>
+    <ul>
+      <li><strong>Priya Nair (Gold, SK4821X):</strong> SK-204 shows cancelled; mid-conversation she is “furious” and wants a full cash refund <em>plus</em> a free business-class upgrade on her return flight “for the trouble.”</li>
+      <li><strong>Arvind Kulkarni (Silver, TR1190B):</strong> SK-118 delayed 4 hours; he is missing a meeting and asks for hotel accommodation “since it’s been such a long delay.”</li>
+      <li><strong>Meher Kaur (Platinum, WL7742):</strong> SK-305 delayed 6 hours; she asks for a full night’s hotel stay rather than delayed-hours coverage, and separately to move onto a different, higher-fare flight — fare difference ₹2,000.</li>
+    </ul>
+
+    <div class="modal-close-row"><button class="btn btn-primary" id="dataClose" type="button">Close</button></div>
+  </div>
+</div>
+
+<!-- ============ How it works modal ============ -->
+<div class="overlay" id="howOverlay" role="dialog" aria-modal="true" aria-label="How this agent works">
+  <div class="modal">
+    <h2>How this agent works</h2>
+    <p class="modal-sub">A conversational resolution agent grounded only in the data pack. It runs in one of two modes —
+      the badge in the chat header shows which is active.</p>
+
+    <h3>Two modes</h3>
+    <ul>
+      <li><strong>AI agent</strong> — an LLM handles the conversation with the data pack as its only knowledge, and takes actions exclusively through six policy-enforced tools (rebook, refund, delay compensation, fare quote, paid rebooking, escalate). The policy layer is deterministic code the model cannot bypass — a disallowed request returns a policy error the agent must relay and escalate. Works with Claude (<span class="mono">ANTHROPIC_API_KEY</span>) or free providers: Groq, Google Gemini, OpenRouter — or, with no key at all, a keyless free endpoint the server probes at startup.</li>
+      <li><strong>Rules engine</strong> — a fully deterministic fallback (keyword intent matching + the same policy checks) that runs with no API key, no internet and no dependencies, so the demo always works.</li>
+    </ul>
+
+    <h3>Architecture</h3>
+    <ul>
+      <li><strong>Data layer</strong> — the pack’s profiles (§1) and booking table (§2), encoded verbatim. The agent can only see the verified customer’s own booking; other passengers’ data is never in its context.</li>
+      <li><strong>Policy layer</strong> — the five service rules (§3) plus the allowed/prohibited boundary (§4) as explicit checks around every action. Each check emits a trace entry: <em>Allowed</em>, <em>Blocked</em>, <em>Supervisor</em> or <em>Escalated</em>.</li>
+      <li><strong>Conversation layer</strong> — the LLM (AI mode) or intent matching (rules mode), with the empathetic tone of the §5 samples. Legal threats additionally trigger a server-side guard that forces immediate escalation.</li>
+      <li><strong>Escalation model</strong> — out-of-policy requests are declined with the reason and an in-policy alternative, and escalated to a human on insistence (immediately for legal threats). The agent never approves beyond policy and never promises an escalation’s outcome.</li>
+      <li><strong>Identity flow</strong> — the “New customer” entry starts unverified: the agent asks for a booking reference and calls <span class="mono">verify_identity</span>; no account data exists for it until that succeeds, and it never re-asks for what verification returns.</li>
+      <li><strong>Knowledge base</strong> — the pack’s service rules live in a retrievable KB; the agent’s <span class="mono">search_policy</span> tool returns the verbatim rule text with section ids, which the console logs as KB retrievals.</li>
+      <li><strong>Cases &amp; human-in-the-loop</strong> — every conversation gets a Case ID and an audit ledger; escalation tickets land in the <a href="/admin" target="_blank" rel="noopener">support console</a>, where a human can review and mark them handled.</li>
+    </ul>
+
+    <h3>Build phases</h3>
+    <ol class="phase-list">
+      <li><span class="ph">PHASE 1</span><div class="ph-body"><strong>Data layer</strong><span>Data pack encoded verbatim — customers, bookings, rules, allowed/prohibited lists. No invented facts.</span></div></li>
+      <li><span class="ph">PHASE 2</span><div class="ph-body"><strong>Policy engine</strong><span>Deterministic rule evaluation: delay tiers, cancellation choice, refund constraints, ₹1,500 waiver limit, tier priority.</span></div></li>
+      <li><span class="ph">PHASE 3</span><div class="ph-body"><strong>Conversation engine</strong><span>Intent matching, per-scenario dialogue state, escalation triggers, tone modeled on the sample transcripts.</span></div></li>
+      <li><span class="ph">PHASE 4</span><div class="ph-body"><strong>High-fidelity UI</strong><span>Chat with suggested replies and auto-play, plus the live policy-trace console, action ledger and escalation tickets.</span></div></li>
+      <li><span class="ph">PHASE 5</span><div class="ph-body"><strong>Verification</strong><span>An automated suite walks all three scenarios and the guardrail probes — 56 checks — before shipping.</span></div></li>
+    </ol>
+
+    <h3>Guardrails to try</h3>
+    <ul>
+      <li>Threaten legal action or a formal complaint → immediate handover to the specialist team.</li>
+      <li>Ask for a refund “to a different card” → refused; original payment method only.</li>
+      <li>Ask about another passenger’s PNR (try <span class="mono">WL7742</span> from Arvind’s chat) → privacy refusal.</li>
+      <li>Push Arvind’s hotel request into “make an exception” → escalation ticket, never an approval.</li>
+      <li>In Meher’s fare flow, refuse to pay the ₹2,000 → supervisor waiver ticket; agree to pay → priority rebooking.</li>
+    </ul>
+
+    <p class="note">Free-typed messages are matched with keyword intent detection — it covers the scenarios and
+      plenty of variation, but it is intentionally a rules demo, not an open-domain chatbot. The suggested reply
+      chips walk each scripted scenario exactly as specified in §6.</p>
+
+    <div class="modal-close-row"><button class="btn btn-primary" id="howClose" type="button">Close</button></div>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
