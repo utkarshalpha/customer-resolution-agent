@@ -65,8 +65,8 @@ function buildUnverifiedPrompt(state) {
   return `You are the customer-facing virtual resolution agent for SK Airways. Today is Wednesday, 23 September 2026 — a day of disruption. The customer in this chat has NOT been identified yet.
 
 # Identity first — nothing else proceeds without it
-- Briefly acknowledge their issue, then ask for their booking reference (PNR).
-- The moment they provide anything that looks like a booking reference, call verify_identity with it.
+- Briefly acknowledge their issue, then ask for their booking reference (PNR) — their name works too.
+- The moment they provide anything that looks like a booking reference OR their name, call verify_identity with it.
 - NEVER discuss any account, booking, flight, or personal data before verify_identity succeeds. You have no customer data until then.
 - If the reference doesn't match, say so and ask them to double-check it. Never guess, never proceed unverified.
 - Ask only for what is missing — once verified, the system gives you their profile and bookings; do not re-ask for things you already know.
@@ -74,6 +74,7 @@ function buildUnverifiedPrompt(state) {
 # What you may do before verification
 - Answer general policy questions using search_policy (it returns the verbatim service rules with section ids). Quote the rules faithfully; never extrapolate.
 - Threats of legal action or a formal complaint must be escalated IMMEDIATELY via escalate_to_human (category legal_threat_or_formal_complaint), even before verification.
+- Anything outside SK Airways bookings and these policies — general knowledge, other topics — politely decline: you only help with disruption assistance. Never answer from outside this knowledge base.
 
 # Tone — match these SK Airways samples
 Sample A — Customer: "My flight got cancelled and no one told me anything!" → Agent: "I completely understand the frustration — I can see flight SK-190 was cancelled due to operational reasons. I can rebook you on the next available flight at no extra cost, or process a full refund. Which would you prefer?"
@@ -134,6 +135,7 @@ ${rows}
 - Never claim an action happened unless the tool result confirms it. If a tool returns allowed=false, relay the policy reason warmly, offer the in-policy alternative, and offer escalation.
 - For beyond-policy requests: explain the policy, offer what IS possible, and offer to escalate to a human. If the customer insists or explicitly asks, call escalate_to_human. Never promise an escalation's outcome.
 - Answer nothing about any other passenger or PNR — politely decline for privacy.
+- Stay strictly on-topic: this booking, its disruption, and these policies. For anything else — general knowledge, other companies, news, chit-chat beyond a greeting — say politely that you can only help with their SK Airways booking and disruption assistance. Never answer from outside this knowledge base.
 - Keep replies short and human: one to three brief paragraphs. Use ₹ amounts exactly as given.
 - Once a legal-threat escalation has happened, the specialist team owns the case: offer only status information and reassurance afterwards.
 
@@ -153,7 +155,7 @@ ${state.startedVerified
 const TOOLS = [
   {
     name: 'verify_identity',
-    description: 'Verify the customer by their booking reference (PNR) and bind this session to their profile. Call this the MOMENT the customer provides anything that looks like a booking reference — no account or booking information exists until it succeeds. On success it returns their profile and bookings, so never re-ask for details it returns. If it fails, ask the customer to double-check the reference; never guess.',
+    description: 'Verify the customer by their booking reference (PNR) or their name, and bind this session to their profile. Call this the MOMENT the customer provides anything that looks like a booking reference or a name — no account or booking information exists until it succeeds. On success it returns their profile and bookings, so never re-ask for details it returns. If it fails, ask the customer to double-check; never guess.',
     strict: true,
     input_schema: {
       type: 'object',
@@ -280,14 +282,22 @@ function executeTool(state, out, name, input) {
       trace(out, '§1 Identity', 'Already verified as ' + state.customer.name + ' (PNR ' + state.customer.pnr + ')', 'info');
       return { allowed: true, already_verified: true, customer: { name: state.customer.name, tier: state.customer.tier, pnr: state.customer.pnr } };
     }
-    const booking = DATA.bookings.find(b => b.pnr.toUpperCase() === ref);
+    let booking = DATA.bookings.find(b => b.pnr.toUpperCase() === ref) || null;
+    let matchedBy = 'booking reference';
+    if (!booking && ref.length >= 4) {
+      const cust = Object.values(DATA.customers).find(c => {
+        const full = c.name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        return full === ref || full.includes(ref) || ref.includes(full) || ref === c.first.toUpperCase();
+      });
+      if (cust) { booking = DATA.bookings.find(b => b.customer === cust.id); matchedBy = 'customer name'; }
+    }
     if (!booking) {
-      trace(out, '§1 Identity', 'No booking matches reference "' + (ref || '—') + '" → verification refused', 'blocked');
-      return { allowed: false, reason: 'No booking matches that reference. Ask the customer to double-check their PNR — do not guess and do not proceed unverified.' };
+      trace(out, '§1 Identity', 'No booking matches "' + (ref || '—') + '" → verification refused', 'blocked');
+      return { allowed: false, reason: 'No booking matches that reference or name. Ask the customer to double-check their PNR — do not guess and do not proceed unverified.' };
     }
     state.customer = DATA.customers[booking.customer];
     const cust = state.customer;
-    trace(out, '§1 Identity', 'Verified ' + cust.name + ' · ' + cust.tier + ' · PNR ' + cust.pnr, 'allowed');
+    trace(out, '§1 Identity', 'Verified ' + cust.name + ' · ' + cust.tier + ' · PNR ' + cust.pnr + ' (matched by ' + matchedBy + ')', 'allowed');
     const rows = DATA.bookings.filter(b => b.customer === cust.id).map(b => {
       trace(out, '§2 Booking data', b.flight + ' ' + b.route + ' · ' + b.date + ' ' + b.dep + ' · ' + b.statusText, 'data');
       return b.flight + ' · ' + b.route + ' · ' + b.date + ' · dep ' + b.dep + ' · ' + b.statusText;

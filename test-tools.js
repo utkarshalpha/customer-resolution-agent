@@ -107,6 +107,10 @@ check('KB returns verbatim §3 text', /not a full night/i.test(r.result.results[
 r = call(u, 'verify_identity', { booking_reference: 'ZZ9999' });
 check('bad reference refused', r.result.allowed === false && u.customer === null);
 
+let un = agent.createAiSession(null);
+r = call(un, 'verify_identity', { booking_reference: 'Meher Kaur' });
+check('verify also matches by customer name', r.result.allowed === true && un.customer && un.customer.id === 'meher');
+
 r = call(u, 'verify_identity', { booking_reference: 'sk 4821x' });
 check('verify binds customer (normalised PNR)', r.result.allowed === true && u.customer && u.customer.id === 'priya');
 check('verify returns bookings, no re-asking needed', r.result.bookings.length === 2 && /Cancelled/.test(r.result.bookings[0]));

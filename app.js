@@ -6,12 +6,6 @@
   var E = window.Engine;
   var $ = function (id) { return document.getElementById(id); };
 
-  var SCENARIOS = {
-    priya: 'Flight SK-204 (Delhi → Goa) is cancelled for operational reasons. Mid-conversation she’s furious — and wants a full cash refund plus a free business-class upgrade on her return flight “for the trouble.”',
-    arvind: 'Flight SK-118 (Mumbai → Bengaluru) is delayed 4 hours. Frustrated about missing a meeting, he asks for hotel accommodation “since it’s been such a long delay.”',
-    meher: 'Flight SK-305 (Delhi → Hyderabad) is delayed 6 hours. She wants a full night’s hotel stay — and to move onto a higher-fare flight with a ₹2,000 fare difference.'
-  };
-  var NEW_DESC = 'The full agentic flow: the agent greets you, asks what happened, verifies your booking reference against the knowledge base, then resolves your case — try any of the three PNRs.';
 
   var serverMode = null;   // 'ai' | 'rules' | null (no server → local engine)
   var serverInfo = null;   // /api/health payload: { mode, provider, label, model }
@@ -123,7 +117,7 @@
         '</div>' +
         '<div class="flightline"><span class="f">' + esc(b.flight + ' · ' + b.route) + '</span>' +
           '<span class="pill pill-' + b.status + '">' + (b.status === 'cancelled' ? 'Cancelled' : 'Delayed ' + b.delayHours + 'h') + '</span></div>' +
-        '<p class="desc">' + esc(SCENARIOS[id]) + '</p>' +
+        '<p class="desc">' + esc(c.history) + '</p>' +
         '<div class="card-actions">' +
           '<button class="btn btn-primary" data-open="' + id + '">Start chat</button>' +
         '</div>';
@@ -536,10 +530,6 @@
     // Everything above is interactive immediately; mode detection (and the
     // keyless-LLM probe on static hosting) runs after, capped at ~8s.
     await detectServer();
-    if (!serverMode) {
-      var al = $('adminLink');
-      if (al) al.style.display = 'none'; // the support console needs the server's /api
-    }
 
     // deep link: ?p=priya|arvind|meher|new & play=1 opens a session directly
     var qs = new URLSearchParams(location.search);

@@ -194,7 +194,13 @@ function recordTranscript(entry, who, text) {
 
 function findPnrInText(text) {
   const condensed = String(text).toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return Engine.DATA.bookings.find(b => condensed.includes(b.pnr.toUpperCase())) || null;
+  const byPnr = Engine.DATA.bookings.find(b => condensed.includes(b.pnr.toUpperCase()));
+  if (byPnr) return byPnr;
+  const cust = Object.values(Engine.DATA.customers).find(c => {
+    const full = c.name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return condensed.includes(full) || condensed.includes(c.first.toUpperCase());
+  });
+  return cust ? Engine.DATA.bookings.find(b => b.customer === cust.id) : null;
 }
 
 /* Rules mode, unverified session: deterministic identity gathering.
