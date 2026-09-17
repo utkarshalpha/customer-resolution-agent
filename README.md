@@ -21,7 +21,8 @@ so it needs a persistent runtime:
   button above (it reads `render.yaml`), then your URL serves everything: the AI chat,
   identity flow, and the `/admin` supervisor console with decisions flowing back into chats.
   Free instances spin down when idle — the first request after a quiet spell takes ~1 min.
-  Optional: add `GROQ_API_KEY` or `GEMINI_API_KEY` in the dashboard for a faster provider.
+  The deploy screen prompts for `GROQ_API_KEY` (free key from console.groq.com) — it powers
+  the AI chat *and* the two-way voice mode (Whisper speech-to-text + Orpheus text-to-speech).
 - **Vercel** ❌ for this build — serverless functions don't share memory between requests,
   so sessions and supervisor notices would be lost mid-conversation (it would need an
   external store like Redis/Postgres first).
@@ -45,7 +46,7 @@ mode fast and reliable —
 
 | Provider | Free key from | Set before `node server.js` |
 |---|---|---|
-| Groq (Llama 3.3 70B) | console.groq.com | `GROQ_API_KEY` |
+| Groq (GPT-OSS 120B + Whisper STT + Orpheus TTS) | console.groq.com | `GROQ_API_KEY` |
 | Google Gemini | aistudio.google.com | `GEMINI_API_KEY` |
 | OpenRouter (free models) | openrouter.ai | `OPENROUTER_API_KEY` |
 | Anthropic Claude | console.anthropic.com (paid) | `ANTHROPIC_API_KEY` + `npm install` |
@@ -64,7 +65,7 @@ Force a specific mode with `AGENT_PROVIDER=groq|gemini|openrouter|pollinations|a
 Only Claude needs `npm install` (the official SDK); every free provider runs dependency-free
 on Node 18+ built-in fetch.
 
-**Tests** (81 checks, no API key needed):
+**Tests** (94 checks, no API key needed):
 
 ```
 npm test
@@ -72,12 +73,17 @@ npm test
 
 ## What it is
 
-Pick one of the three passengers from the data pack and chat as them — free text or the
-suggested replies, or **Watch scenario** to run the full §6 script end-to-end.
+A full product experience, not a demo screen. Sign in as one of the three passengers from
+the data pack (start typing a name or PNR — the profiles suggest themselves), land on a
+dashboard with your boarding passes, live case updates and agent actions, then talk to
+**Aria** — the airline's resolution agent — by chat or by **voice**: tap the mic, speak,
+and she answers out loud with synced subtitles (mic audio → Groq Whisper → the LLM →
+Orpheus TTS, with the browser's speech engine as fallback). Tapping a boarding pass stages
+a question about that flight; nothing is ever sent on the customer's behalf.
 
 ### AI mode — how the agent works
 
-- **An LLM drives the conversation** (Claude, Groq Llama, Gemini, or the keyless fallback —
+- **An LLM drives the conversation** (Claude, Groq GPT-OSS, Gemini, or the keyless fallback —
   same behavior contract for all). Its system prompt contains the data pack — but only the
   *verified customer's* profile and bookings (other passengers' data is never in its
   context), the five §3 service rules, the §4 allowed/prohibited boundary, and the §5 tone
@@ -98,10 +104,15 @@ suggested replies, or **Watch scenario** to run the full §6 script end-to-end.
   in the console.
 - **Legal threats** additionally trip a server-side guard that forces immediate escalation
   before any further resolution.
-- The **Agent console** beside the chat shows the live audit: every tool call, the rule check
-  behind it (Allowed / Blocked / Supervisor / Escalated), the action ledger and escalation
-  tickets. Every conversation gets a **Case ID**; turns that change the booking render a
-  resolution summary card.
+- The **Agent console** (opt-in drawer via the Console button) shows the live audit: every
+  tool call, the rule check behind it (Allowed / Blocked / Supervisor / Escalated), the
+  action ledger and escalation tickets. Every conversation gets a **Case ID**; turns that
+  change the booking render a resolution summary card.
+- **Two-way voice mode** — a mic-icon button opens a full-screen voice overlay: the mic
+  records, a silence detector ends your sentence, `/api/stt` (Groq Whisper) transcribes it,
+  the same policy-checked agent answers, and `/api/tts` (Groq Orpheus) speaks the reply with
+  subtitles synced to the audio. Watchdog-protected so a lost audio callback can never
+  freeze the loop; closing voice mode releases the microphone.
 - **Human-in-the-loop, closed loop** — open `/admin` (running `node server.js`) for the
   Resolution Console: all cases and open escalations with **Approve / Deny**. The decision
   flows back into the live customer chat within seconds — an approved ₹2,000 fare waiver
@@ -139,25 +150,28 @@ runs in the browser or on the server with no key and no dependencies.
 ## Files
 
 ```
-server.js        HTTP server: static UI + /api/session, /api/message, /api/health.
-                 Provider resolution (Claude → Groq → Gemini → OpenRouter → custom
-                 → keyless probe → rules) and the session store.
+server.js        HTTP server: static UI + /api/session, /api/message, /api/health,
+                 /api/tts (Orpheus voice), /api/stt (Whisper transcription), the
+                 persistent audit log, and provider resolution (Claude → Groq →
+                 Gemini → OpenRouter → custom → keyless probe → rules).
 policy.js        The shared deterministic layer: system prompt builder (data pack,
-                 customer-scoped), 6 tool definitions, and the policy checks no
-                 model can bypass. Both runners use it.
+                 customer-scoped), 9 strict tool definitions, and the policy checks
+                 no model can bypass. Both runners use it.
 agent-openai.js  Free-LLM runner: OpenAI-compatible chat loop (built-in fetch,
                  zero deps) with retries/backoff for free-tier flakiness.
 agent.js         Anthropic runner (claude-opus-5): official SDK, prompt caching,
                  mid-conversation system guard, refusal handling.
 engine.js        Data pack (verbatim) + delay-tier maths + the deterministic
                  rules-mode conversation engine. Runs in node and the browser.
-app.js           UI: chat, suggested replies, auto-play, policy-trace console,
-                 provider badge. Uses the server API; falls back to the
-                 in-browser engine if no server is reachable.
+app.js           UI: login with profile suggestions, animated dashboard with live
+                 case feed, chat with typewriter replies and suggested chips, the
+                 two-way voice overlay, opt-in policy-trace console, provider
+                 badge. Uses the server API; falls back to the in-browser engine
+                 if no server is reachable.
 styles.css       Design system (white + indigo).
-index.html       Page shell + in-app data-pack viewer + "How it works".
+index.html       Page shell + "How it works".
 test.js          56 checks: the three scenarios + guardrail probes (rules engine).
-test-tools.js    25 checks: the shared policy layer (what no model can bypass).
+test-tools.js    38 checks: the shared policy layer (what no model can bypass).
 ```
 
 ### Interpretation notes (edge cases in the pack)
