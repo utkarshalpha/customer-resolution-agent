@@ -638,11 +638,12 @@
       var notices = data.notices || [];
       if (!notices.length) return;
       setBusy(true);
-      for (var i = 0; i < notices.length; i++) {
-        await renderAgentTurn(notices[i], 'Supervisor decision · Resolution Console', 200);
-      }
-      if (data.fullEscalated) $('escBanner').classList.add('show');
-      setBusy(false);
+      try {
+        for (var i = 0; i < notices.length; i++) {
+          await renderAgentTurn(notices[i], 'Supervisor decision · Resolution Console', 200);
+        }
+        if (data.fullEscalated) $('escBanner').classList.add('show');
+      } finally { setBusy(false); }
       pollMyCases();
     } catch (e) { /* retry next poll */ }
   }
@@ -705,21 +706,29 @@
     $('voiceOverlay').classList.add('speaking');
     $('voiceStatus').textContent = 'Aria is speaking';
 
+    var doneCalled = false;
     var done = function () {
-      if (gen !== speakGen) return;
+      if (doneCalled || gen !== speakGen) return;
+      doneCalled = true;
+      clearTimeout(guard);
       if (subTimer) { clearInterval(subTimer); subTimer = null; }
       $('voiceOverlay').classList.remove('speaking');
       $('voiceStatus').textContent = 'Listening to the conversation';
       $('voiceText').textContent = text; // full line stays as a recap
       setTimeout(maybeListen, 400); // hand the turn back to the customer
     };
+    // hard budget: if every audio callback is lost, finish anyway so the mic re-arms
+    var guard = setTimeout(done, 15000 + Math.min(45000, text.length * 90));
 
     /* natural voice via the server (Groq Orpheus), subtitles synced to audio time */
     try {
+      var ttsAbort = new AbortController();
+      var ttsTimer = setTimeout(function () { ttsAbort.abort(); }, 15000);
       var r = await fetch('/api/tts', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text })
+        body: JSON.stringify({ text: text }), signal: ttsAbort.signal
       });
+      clearTimeout(ttsTimer);
       if (!r.ok) throw new Error('tts unavailable');
       if (gen !== speakGen) return; // superseded while fetching
       var blob = await r.blob();
@@ -743,15 +752,22 @@
     if (gen !== speakGen) return;
     try {
       window.speechSynthesis.cancel();
-      var v = pickBrowserVoice();
-      sents.forEach(function (s, i) {
-        var u = new SpeechSynthesisUtterance(s);
-        if (v) u.voice = v;
-        u.rate = 1.02;
-        u.onstart = function () { if (gen === speakGen) $('voiceText').textContent = s; };
-        if (i === sents.length - 1) { u.onend = done; u.onerror = done; }
-        window.speechSynthesis.speak(u);
-      });
+      // Chrome quirk: speak() right after cancel() can silently do nothing — delay a beat and resume()
+      setTimeout(function () {
+        if (gen !== speakGen) return;
+        try {
+          var v = pickBrowserVoice();
+          sents.forEach(function (s, i) {
+            var u = new SpeechSynthesisUtterance(s);
+            if (v) u.voice = v;
+            u.rate = 1.02;
+            u.onstart = function () { if (gen === speakGen) $('voiceText').textContent = s; };
+            if (i === sents.length - 1) { u.onend = done; u.onerror = done; }
+            window.speechSynthesis.speak(u);
+          });
+          window.speechSynthesis.resume();
+        } catch (e) { done(); }
+      }, 150);
     } catch (e) { done(); }
   }
 
@@ -818,7 +834,12 @@
     if ($('voiceOverlay').classList.contains('speaking')) return;
     if (!(navigator.mediaDevices && window.MediaRecorder)) { startSRListen(); return; }
     try {
-      if (!micStream || !micStream.active) micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!micStream || !micStream.active) {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // the level meter is bound to the old stream — rebuild it for the new one
+        if (whisper.ctx) { try { whisper.ctx.close(); } catch (e) {} whisper.ctx = null; whisper.analyser = null; }
+        micStream.getTracks().forEach(function (t) { t.onended = function () { micStream = null; }; });
+      }
     } catch (e) {
       micBlocked = true;
       $('voiceStatus').textContent = 'Mic access blocked — allow the microphone (🔒 in the address bar), then tap the mic again';
@@ -921,6 +942,14 @@
     stopWhisper(true);
     if (recog) { try { recog.abort(); } catch (e) {} }
   }
+
+  /* Watchdog: whatever callback got lost, voice mode re-arms itself. If nothing
+     is speaking, listening, or in flight, hand the mic back to the customer. */
+  setInterval(function () {
+    if (!voiceOn || micBlocked || busy || listening || whisper.active) return;
+    if ($('voiceOverlay').classList.contains('speaking')) return; // the per-speak guard timer clears stuck speech
+    maybeListen();
+  }, 2000);
 
   /* ---------- wiring ---------- */
 
