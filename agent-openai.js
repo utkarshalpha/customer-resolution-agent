@@ -114,16 +114,21 @@ async function chat(provider, body) {
   throw lastErr;
 }
 
-/* Quick startup probe for the keyless provider (~1 token). */
+/* Quick startup probe for the keyless provider (~1 token).
+   Hard-capped at 8s with no retries, so page/server startup never hangs
+   on a slow endpoint — a failed probe just means the rules fallback. */
 async function probe(providerName) {
   const provider = resolveProvider(providerName);
   if (!provider) return false;
   try {
-    const r = await chat(provider, {
-      model: provider.model,
-      messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
-      max_tokens: 5
-    });
+    const r = await Promise.race([
+      chatOnce(provider, {
+        model: provider.model,
+        messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+        max_tokens: 5
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('probe timeout')), 8000))
+    ]);
     return Boolean(r.choices && r.choices[0] && r.choices[0].message);
   } catch (e) {
     return false;

@@ -434,16 +434,6 @@
 
   document.addEventListener('DOMContentLoaded', async function () {
     buildLanding();
-    await detectServer();
-    if (!serverMode) {
-      var al = $('adminLink');
-      if (al) al.style.display = 'none'; // the support console needs the server's /api
-    }
-
-    // deep link: ?p=priya|arvind|meher & play=1 opens a session directly
-    var qs = new URLSearchParams(location.search);
-    var qp = qs.get('p');
-    if (qp && E.DATA.customers[qp]) openSession(qp, qs.get('play') === '1');
 
     $('sendBtn').addEventListener('click', function () { submitMessage($('userInput').value); });
     $('userInput').addEventListener('keydown', function (ev) {
@@ -484,5 +474,18 @@
         $('howOverlay').classList.remove('show');
       }
     });
+
+    // Everything above is interactive immediately; mode detection (and the
+    // keyless-LLM probe on static hosting) runs after, capped at ~8s.
+    await detectServer();
+    if (!serverMode) {
+      var al = $('adminLink');
+      if (al) al.style.display = 'none'; // the support console needs the server's /api
+    }
+
+    // deep link: ?p=priya|arvind|meher|new & play=1 opens a session directly
+    var qs = new URLSearchParams(location.search);
+    var qp = qs.get('p');
+    if (qp && (E.DATA.customers[qp] || qp === 'new')) openSession(qp, qs.get('play') === '1');
   });
 })();
