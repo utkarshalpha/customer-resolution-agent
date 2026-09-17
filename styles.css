@@ -319,6 +319,18 @@ a.textlink:hover { text-decoration: underline; }
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .backarrow:hover { background: var(--tint); border-color: #c9d4ee; }
+.iconbtn {
+  flex: none;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.iconbtn:hover { background: var(--tint); border-color: #c9d4ee; }
 .chathead .who { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .chathead .who .avatar { width: 34px; height: 34px; font-size: 12px; }
 .chathead .who .nm { font-weight: 600; font-size: 14.5px; white-space: nowrap; }
