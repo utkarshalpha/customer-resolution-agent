@@ -200,7 +200,11 @@
       var ask = b.status === 'unaffected'
         ? 'Is my ' + b.route + ' flight on ' + b.date + ' still on schedule?'
         : 'What are my options for flight ' + b.flight + '?';
-      el.addEventListener('click', function () { if (!busy) submitMessage(ask); });
+      el.addEventListener('click', function () {
+        // never send on the customer's behalf — stage the question for them
+        $('userInput').value = ask;
+        $('userInput').focus();
+      });
       m.appendChild(el);
     });
     resetGroup();
@@ -286,7 +290,7 @@
   function openChat(ask) {
     if (session && profile && session.customerId === profile.id) {
       showView('chatView');
-      if (ask && !busy) submitMessage(ask);
+      if (ask) { $('userInput').value = ask; $('userInput').focus(); }
       return;
     }
     pendingAsk = ask || null;
@@ -347,7 +351,7 @@
     }
     await renderAgentTurn(opening, 'Session opened', 300);
     setBusy(false);
-    if (pendingAsk) { var ask = pendingAsk; pendingAsk = null; submitMessage(ask); return; }
+    if (pendingAsk) { $('userInput').value = pendingAsk; $('userInput').focus(); pendingAsk = null; return; }
     if (autoplay) runAutoplay(playGen);
   }
 
@@ -514,16 +518,23 @@
   }
 
   async function renderAgentTurn(out, turnLabel, baseDelay) {
-    showTyping(true);
-    await sleep(Math.min(baseDelay, 500) + 350);
-    showTyping(false);
     var parts = out.parts || [];
-    for (var i = 0; i < parts.length; i++) {
-      await typeBubble(parts[i]);
-      if (i < parts.length - 1) {
-        showTyping(true);
-        await sleep(450);
-        showTyping(false);
+    if (voiceOn) {
+      // voice mode is latency-critical: start the audio NOW, land the text instantly
+      speakParts(parts, out);
+      showTyping(false);
+      for (var i = 0; i < parts.length; i++) addBubble('agent', parts[i]);
+    } else {
+      showTyping(true);
+      await sleep(Math.min(baseDelay, 500) + 350);
+      showTyping(false);
+      for (var i = 0; i < parts.length; i++) {
+        await typeBubble(parts[i]);
+        if (i < parts.length - 1) {
+          showTyping(true);
+          await sleep(450);
+          showTyping(false);
+        }
       }
     }
     if (out.customer) {
@@ -541,7 +552,6 @@
       (out.actions || []).forEach(function (a) { localFeed.unshift({ kind: 'act', id: a.id, label: a.label }); });
     }
     if (out.chips) renderChips(out.chips);
-    speakParts(parts, out);
   }
 
   /* ---------- message flow ---------- */
@@ -668,7 +678,7 @@
     $('voiceOverlay').classList.toggle('show', on);
     if (!on) {
       stopSpeak();
-      stopListening();
+      releaseMic(); // hardware off — Chrome's recording indicator must go away
     } else {
       $('voiceStatus').textContent = 'Listening to the conversation';
       // greet immediately — confirms the audio path and unlocks playback
@@ -829,10 +839,20 @@
     }
   }
 
+  function releaseMic() {
+    stopListening();
+    micArming = false;
+    if (micStream) { try { micStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} micStream = null; }
+    if (whisper.ctx) { try { whisper.ctx.close(); } catch (e) {} whisper.ctx = null; whisper.analyser = null; }
+  }
+
+  var micArming = false; // two re-arm timers must never build two recorders
+
   async function startWhisperListen() {
-    if (!voiceOn || busy || micBlocked || whisper.active) return;
+    if (!voiceOn || busy || micBlocked || whisper.active || micArming) return;
     if ($('voiceOverlay').classList.contains('speaking')) return;
     if (!(navigator.mediaDevices && window.MediaRecorder)) { startSRListen(); return; }
+    micArming = true;
     try {
       if (!micStream || !micStream.active) {
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -841,10 +861,12 @@
         micStream.getTracks().forEach(function (t) { t.onended = function () { micStream = null; }; });
       }
     } catch (e) {
+      micArming = false;
       micBlocked = true;
       $('voiceStatus').textContent = 'Mic access blocked — allow the microphone (🔒 in the address bar), then tap the mic again';
       return;
     }
+    micArming = false;
     if (!voiceOn || busy || whisper.active) return; // state may have moved while the permission prompt was up
     try {
       if (!whisper.ctx) {
@@ -884,7 +906,7 @@
           whisper.heard = true; whisper.silentMs = 0;
         } else if (whisper.heard) {
           whisper.silentMs += 120;
-          if (whisper.silentMs >= 1300) { stopWhisper(false); return; }
+          if (whisper.silentMs >= 900) { stopWhisper(false); return; }
         }
       } else {
         whisper.heard = true; // no level meter — take a fixed 6s clip
@@ -908,6 +930,11 @@
       if (!text || text.length < 2) {
         $('voiceStatus').textContent = 'I didn’t catch that — say it once more';
         setTimeout(maybeListen, 600);
+        return;
+      }
+      if (busy) {
+        // she's still answering the previous one — never queue a second copy
+        $('voiceStatus').textContent = 'One moment — still finishing your last question';
         return;
       }
       $('voiceText').textContent = '“' + text + '”';
