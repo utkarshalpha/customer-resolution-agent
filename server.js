@@ -28,7 +28,10 @@ const PORT = Number(process.env.PORT || 3000);
 
 (function loadConfigJson() {
   try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
+    // strip a UTF-8 BOM if present (Windows editors often add one)
+    let rawCfg = fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8');
+    if (rawCfg.charCodeAt(0) === 0xFEFF) rawCfg = rawCfg.slice(1);
+    const cfg = JSON.parse(rawCfg);
     const map = {
       apiKey: 'ANTHROPIC_API_KEY',
       anthropicApiKey: 'ANTHROPIC_API_KEY',
@@ -442,6 +445,53 @@ const server = http.createServer(async (req, res) => {
       }
       cases.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
       return json(res, 200, { cases });
+    }
+
+    /* Natural TTS for voice mode — Groq Orpheus, proxied so the key stays
+       server-side. Client falls back to browser speech on any failure. */
+    if (req.method === 'POST' && url.pathname === '/api/tts') {
+      const body = await readBody(req);
+      const text = String(body.text || '').slice(0, 600).trim();
+      if (!text) return json(res, 400, { error: 'empty text' });
+      const key = process.env.GROQ_API_KEY;
+      if (!key) return json(res, 503, { error: 'no TTS provider configured' });
+      try {
+        const up = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'canopylabs/orpheus-v1-english', input: text, voice: 'tara', response_format: 'wav' })
+        });
+        if (!up.ok) {
+          const msg = (await up.text()).slice(0, 200);
+          console.warn('[tts unavailable]', up.status, msg);
+          return json(res, 503, { error: 'TTS unavailable' });
+        }
+        const buf = Buffer.from(await up.arrayBuffer());
+        res.writeHead(200, { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-store' });
+        return res.end(buf);
+      } catch (e) {
+        return json(res, 503, { error: 'TTS unavailable' });
+      }
+    }
+
+    /* Per-customer case feed for the dashboard (tickets + agent actions). */
+    if (req.method === 'GET' && url.pathname === '/api/mycases') {
+      const cid = String(url.searchParams.get('customer') || '');
+      const mine = [];
+      const liveIds = new Set();
+      for (const entry of sessions.values()) {
+        const c = customerOf(entry);
+        if (!c || c.id !== cid) continue;
+        liveIds.add(entry.caseId);
+        mine.push({ caseId: entry.caseId, createdAt: entry.createdAt, actions: entry.actions, tickets: entry.tickets, live: true });
+      }
+      for (const c of historicalCases.values()) {
+        if (c.customer && c.customer.id === cid && !liveIds.has(c.caseId)) {
+          mine.push({ caseId: c.caseId, createdAt: c.createdAt, actions: c.actions, tickets: c.tickets, live: false });
+        }
+      }
+      mine.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      return json(res, 200, { cases: mine });
     }
 
     /* Full case record — transcript + actions + tickets, downloadable. */

@@ -20,9 +20,10 @@ const ENV = (typeof process !== 'undefined' && process.env) ? process.env : {};
 
 const PRESETS = {
   groq: {
-    label: 'Groq · Llama 3.3 70B',
+    label: 'Groq · GPT-OSS 120B',
     url: 'https://api.groq.com/openai/v1/chat/completions',
-    model: 'llama-3.3-70b-versatile',
+    model: 'openai/gpt-oss-120b',
+    fallbackModel: 'openai/gpt-oss-20b', // when the 120B is TPM-throttled
     keyEnv: 'GROQ_API_KEY'
   },
   gemini: {
@@ -54,7 +55,7 @@ const PRESETS = {
 function resolveProvider(name) {
   const preset = PRESETS[name];
   if (!preset) return null;
-  const p = { name, label: preset.label, url: preset.url, model: preset.model, key: null };
+  const p = { name, label: preset.label, url: preset.url, model: preset.model, fallbackModel: preset.fallbackModel || null, key: null };
   if (name === 'custom') {
     const base = ENV.LLM_BASE_URL;
     if (!base) return null;
@@ -88,6 +89,9 @@ async function chatOnce(provider, body) {
     if (!res.ok) {
       const err = new Error('LLM API error HTTP ' + res.status + ': ' + text.slice(0, 300));
       err.status = res.status;
+      const ra = parseFloat(res.headers.get('retry-after') || '0') * 1000;
+      const m = text.match(/try again in ([0-9.]+)s/i);
+      err.retryAfterMs = ra || (m ? parseFloat(m[1]) * 1000 : 0);
       throw err;
     }
     return JSON.parse(text);
@@ -97,12 +101,18 @@ async function chatOnce(provider, body) {
 }
 
 /* Free tiers and the keyless endpoint drop connections and rate-limit —
-   retry network errors, 429 and 5xx with a short backoff. */
-async function chat(provider, body) {
+   retry network errors and 5xx with a short backoff, honour retry-after on
+   429s, and drop to the provider's fallback model if the big one stays
+   throttled (e.g. Groq: gpt-oss-120b → gpt-oss-20b). */
+async function chat(provider, body, _noFallback) {
   const delays = [0, 1500, 4000];
-  let lastErr;
+  let lastErr = null;
   for (let attempt = 0; attempt < delays.length; attempt++) {
-    if (delays[attempt]) await new Promise(r => setTimeout(r, delays[attempt]));
+    let wait = delays[attempt];
+    if (lastErr && lastErr.status === 429 && lastErr.retryAfterMs) {
+      wait = Math.min(lastErr.retryAfterMs + 500, 30000);
+    }
+    if (wait) await new Promise(r => setTimeout(r, wait));
     try {
       return await chatOnce(provider, body);
     } catch (err) {
@@ -110,6 +120,9 @@ async function chat(provider, body) {
       const retryable = !err.status || err.status === 429 || err.status >= 500;
       if (!retryable) throw err;
     }
+  }
+  if (!_noFallback && provider.fallbackModel && body.model !== provider.fallbackModel && lastErr && lastErr.status === 429) {
+    return chat(provider, Object.assign({}, body, { model: provider.fallbackModel }), true);
   }
   throw lastErr;
 }

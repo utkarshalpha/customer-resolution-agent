@@ -1,17 +1,20 @@
-/* SK Airways — Resolution Agent · UI layer
-   Talks to server.js (/api). If no server is reachable (e.g. index.html
-   opened directly from disk), falls back to the in-browser rules engine. */
+/* SK Airways — Customer Resolution Agent · UI
+   Views: login → dashboard → chat with Aria (+ voice mode).
+   Talks to server.js (/api). With no server it falls back to the in-browser
+   agent (keyless LLM) or the deterministic rules engine. */
 'use strict';
 (function () {
   var E = window.Engine;
   var $ = function (id) { return document.getElementById(id); };
 
-
-  var serverMode = null;   // 'ai' | 'rules' | null (no server → local engine)
-  var serverInfo = null;   // /api/health payload: { mode, provider, label, model }
-  var session = null;      // { kind:'api', id, customerId, turn } | { kind:'local', state }
+  var serverMode = null;   // 'ai' | 'rules' | null (no server)
+  var serverInfo = null;
+  var clientAI = null;     // static hosting: keyless LLM from the browser
+  var profile = null;      // the signed-in customer (from the data pack)
+  var session = null;      // { kind:'api'|'client'|'local', ... }
   var busy = false;
   var playGen = 0;
+  var pendingAsk = null;
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function sleep(ms) {
@@ -26,24 +29,43 @@
   }
   function esc(s) {
     var div = document.createElement('div');
-    div.textContent = s;
+    div.textContent = s == null ? '' : String(s);
     return div.innerHTML;
   }
+  /* light formatting: **bold** and list markers → clean bullets */
+  function fmt(text) {
+    var s = esc(text);
+    s = s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    s = s.split('\n').map(function (l) { return l.replace(/^\s*[*\-•]\s+/, '• '); }).join('<br>');
+    return s;
+  }
+
+  /* ---------- sounds + haptics ---------- */
+  var actx = null;
+  function blip(freq, gain) {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') { actx.resume(); }
+      var o = actx.createOscillator(), v = actx.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      v.gain.setValueAtTime(gain, actx.currentTime);
+      v.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.12);
+      o.connect(v); v.connect(actx.destination);
+      o.start(); o.stop(actx.currentTime + 0.13);
+    } catch (e) { /* silent */ }
+  }
+  function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
 
   /* ---------- transport ---------- */
-
-  var clientAI = null; // static hosting (e.g. GitHub Pages): keyless LLM called from the browser
 
   async function detectServer() {
     try {
       var r = await fetch('api/health');
       if (!r.ok) throw new Error('bad status');
-      var h = await r.json();
-      serverMode = h.mode;
-      serverInfo = h;
+      serverInfo = await r.json();
+      serverMode = serverInfo.mode;
     } catch (e) {
-      serverMode = null; // file:// / static hosting / server down
-      serverInfo = null;
+      serverMode = null; serverInfo = null;
       if (window.AgentFree && window.Policy) {
         try {
           var prov = window.AgentFree.resolveProvider('pollinations');
@@ -55,19 +77,16 @@
 
   async function apiStart(customerId) {
     var r = await fetch('/api/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customer: customerId })
     });
     var data = await r.json();
     if (!r.ok) throw new Error(data.error || 'session failed');
     return data;
   }
-
   async function apiSend(text) {
     var r = await fetch('/api/message', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: session.id, text: text })
     });
     var data = await r.json();
@@ -76,12 +95,9 @@
   }
 
   function modeLabel() {
-    if (serverMode === 'ai') {
-      var who = serverInfo && serverInfo.label ? serverInfo.label : 'LLM';
-      return { text: 'AI agent · ' + who, cls: 'mode mode-ai' };
-    }
+    if (serverMode === 'ai') return { text: 'AI · ' + (serverInfo && serverInfo.label || 'LLM'), cls: 'mode mode-ai' };
     if (serverMode === 'rules') return { text: 'Rules engine', cls: 'mode mode-rules' };
-    if (clientAI) return { text: 'AI agent · Free LLM (in-browser)', cls: 'mode mode-ai' };
+    if (clientAI) return { text: 'AI · in-browser', cls: 'mode mode-ai' };
     return { text: 'Local demo', cls: 'mode mode-rules' };
   }
 
@@ -98,71 +114,169 @@
     return chips.slice(0, 3);
   }
 
-  /* ---------- landing ---------- */
+  /* ---------- views ---------- */
 
-  function buildLanding() {
-    var wrap = $('cards');
-    wrap.innerHTML = '';
-    Object.keys(E.DATA.customers).forEach(function (id) {
-      var c = E.DATA.customers[id];
-      var b = E.DATA.bookings.filter(function (x) { return x.customer === id && x.status !== 'unaffected'; })[0];
-      var card = document.createElement('article');
-      card.className = 'card';
-      card.innerHTML =
-        '<div class="card-head">' +
-          '<div class="avatar">' + esc(initials(c.name)) + '</div>' +
-          '<div><div class="card-name">' + esc(c.name) + '</div>' +
-          '<div class="card-meta"><span class="tier tier-' + c.tier.toLowerCase() + '">' + c.tier + '</span>' +
-          '<span class="pnr">PNR ' + c.pnr + '</span></div></div>' +
-        '</div>' +
-        '<div class="flightline"><span class="f">' + esc(b.flight + ' · ' + b.route) + '</span>' +
-          '<span class="pill pill-' + b.status + '">' + (b.status === 'cancelled' ? 'Cancelled' : 'Delayed ' + b.delayHours + 'h') + '</span></div>' +
-        '<p class="desc">' + esc(c.history) + '</p>' +
-        '<div class="card-actions">' +
-          '<button class="btn btn-primary" data-open="' + id + '">Start chat</button>' +
+  function showView(v) {
+    ['loginView', 'dashView', 'chatView'].forEach(function (id) { $(id).hidden = (id !== v); });
+    $('logoutBtn').hidden = (v === 'loginView');
+    window.scrollTo(0, 0);
+  }
+
+  /* ---------- login ---------- */
+
+  function renderLoginList(filter) {
+    var list = $('loginList');
+    var q = (filter || '').trim().toLowerCase();
+    var opts = Object.keys(E.DATA.customers).map(function (id) { return E.DATA.customers[id]; })
+      .filter(function (c) {
+        if (!q) return true;
+        return c.name.toLowerCase().indexOf(q) !== -1 || c.pnr.toLowerCase().indexOf(q) !== -1;
+      });
+    if (!opts.length) { list.classList.remove('show'); return; }
+    list.innerHTML = opts.map(function (c) {
+      return '<div class="loginopt" data-id="' + esc(c.id) + '">' +
+        '<span class="avatar" style="width:36px;height:36px;font-size:12.5px">' + esc(initials(c.name)) + '</span>' +
+        '<span><span class="nm">' + esc(c.name) + '</span><br><span class="sub">' + esc(c.tier) + ' · PNR ' + esc(c.pnr) + '</span></span>' +
         '</div>';
-      wrap.appendChild(card);
-    });
-
-    wrap.addEventListener('click', function (ev) {
-      var t = ev.target.closest('button');
-      if (!t) return;
-      if (t.dataset.open) openSession(t.dataset.open, false);
-      if (t.dataset.play) openSession(t.dataset.play, true);
+    }).join('');
+    list.classList.add('show');
+    list.querySelectorAll('.loginopt').forEach(function (o) {
+      o.addEventListener('mousedown', function (ev) { ev.preventDefault(); login(o.dataset.id); });
     });
   }
 
-  /* ---------- session ---------- */
+  function login(id) {
+    profile = E.DATA.customers[id];
+    if (!profile) return;
+    try { sessionStorage.setItem('sk_profile', id); } catch (e) {}
+    $('loginList').classList.remove('show');
+    $('loginInput').value = '';
+    blip(700, 0.05);
+    renderDash();
+    showView('dashView');
+    pollMyCases();
+  }
+
+  function logout() {
+    profile = null; session = null; playGen++;
+    try { sessionStorage.removeItem('sk_profile'); } catch (e) {}
+    setVoice(false);
+    showView('loginView');
+  }
+
+  /* ---------- boarding passes ---------- */
+
+  function ticketHTML(b) {
+    var cities = b.route.split('→').map(function (s) { return s.trim().toUpperCase(); });
+    var stampCls = 'stamp-' + b.status;
+    var stampTxt = b.status === 'cancelled' ? 'Cancelled' : (b.status === 'delayed' ? 'Delayed ' + b.delayHours + 'h' : 'On schedule');
+    return '<div class="stub"><svg width="18" height="18" viewBox="0 0 26 26"><path d="M2 20 L13 4 L16 9 L24 20 L16 16 L10 20 Z" fill="#ffffff"/></svg><span class="air">SK AIRWAYS</span></div>' +
+      '<div class="tmain">' +
+        '<div class="trow1"><span class="route">' + esc(cities[0]) + '<span class="arr">→</span>' + esc(cities[1] || '') + '</span>' +
+        '<span class="fno">' + esc(b.flight) + '</span></div>' +
+        '<div class="tgrid">' +
+          '<div class="tf"><div class="k">Date</div><div class="v">' + esc(b.date) + '</div></div>' +
+          '<div class="tf"><div class="k">Scheduled</div><div class="v' + (b.newDep ? ' strike' : '') + '">' + esc(b.dep) + '</div></div>' +
+          (b.newDep ? '<div class="tf"><div class="k">New departure</div><div class="v">' + esc(b.newDep) + '</div></div>' : '') +
+          '<div class="tf"><div class="k">Status</div><div class="v">' + esc(b.statusText) + '</div></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="tside"><span class="stamp ' + stampCls + '">' + esc(stampTxt) + '</span>' +
+        '<span class="tpnr">PNR ' + esc(b.pnr) + '</span></div>';
+  }
+
+  function addTicketCards(customerId) {
+    var m = $('messages');
+    E.DATA.bookings.filter(function (b) { return b.customer === customerId; }).forEach(function (b) {
+      var el = document.createElement('div');
+      el.className = 'ticket';
+      el.innerHTML = ticketHTML(b);
+      m.appendChild(el);
+    });
+    m.scrollTop = m.scrollHeight;
+  }
+
+  /* ---------- dashboard ---------- */
+
+  function renderDash() {
+    if (!profile) return;
+    $('dashName').textContent = 'Hello, ' + profile.first;
+    $('dashMeta').innerHTML =
+      '<span class="tier tier-' + esc(profile.tier.toLowerCase()) + '">' + esc(profile.tier) + '</span>' +
+      '<span class="mono" style="font-size:13px">PNR ' + esc(profile.pnr) + '</span>' +
+      '<span style="opacity:.75">' + esc(profile.email) + '</span>';
+    var fl = $('dashFlights');
+    fl.innerHTML = '';
+    E.DATA.bookings.filter(function (b) { return b.customer === profile.id; }).forEach(function (b) {
+      var el = document.createElement('div');
+      el.className = 'ticket';
+      el.setAttribute('role', 'button');
+      el.tabIndex = 0;
+      el.innerHTML = ticketHTML(b);
+      var ask = b.status === 'unaffected'
+        ? 'Is my ' + b.route + ' flight on ' + b.date + ' still on schedule?'
+        : 'What are my options for flight ' + b.flight + '?';
+      el.addEventListener('click', function () { openChat(ask); });
+      fl.appendChild(el);
+    });
+  }
+
+  var myCasesTimer = null;
+  async function pollMyCases() {
+    if (!profile || !serverMode) return;
+    try {
+      var r = await fetch('/api/mycases?customer=' + encodeURIComponent(profile.id));
+      if (!r.ok) return;
+      var data = await r.json();
+      var box = $('dashCases');
+      var items = [];
+      (data.cases || []).forEach(function (c) {
+        c.tickets.forEach(function (t) {
+          var st = t.handled ? (t.decision || 'handled') : 'open';
+          items.push('<div class="feeditem tk' + (t.handled ? ' done' : '') + '"><span class="id">' + esc(t.id) + '</span><span>' + esc(t.label) + '</span><span class="st ' + esc(st) + '">' + esc(st.toUpperCase()) + '</span></div>');
+        });
+        c.actions.forEach(function (a) {
+          items.push('<div class="feeditem"><span class="id">' + esc(a.id) + '</span><span>' + esc(a.label) + '</span></div>');
+        });
+      });
+      box.innerHTML = items.length ? items.slice(0, 10).join('')
+        : '<p class="empty-note">Nothing yet — raised tickets and agent actions appear here, live.</p>';
+    } catch (e) { /* next poll */ }
+  }
+
+  /* ---------- chat ---------- */
 
   function updateWho(c) {
-    var tierEl = $('who-tier');
-    if (c) {
-      $('who-avatar').textContent = initials(c.name);
-      $('who-name').textContent = c.name;
-      tierEl.textContent = c.tier;
-      tierEl.className = 'tier tier-' + c.tier.toLowerCase();
-      $('who-pnr').textContent = 'PNR ' + c.pnr;
-    } else {
-      $('who-avatar').textContent = '?';
-      $('who-name').textContent = 'New customer';
-      tierEl.textContent = 'Unverified';
-      tierEl.className = 'tier tier-silver';
-      $('who-pnr').textContent = 'PNR —';
+    if (!c) return;
+    $('who-name').textContent = c.name;
+    $('who-avatar').textContent = initials(c.name);
+    $('who-tier').textContent = c.tier;
+    $('who-pnr').textContent = 'PNR ' + c.pnr;
+    if (!profile || profile.id !== c.id) {
+      profile = E.DATA.customers[c.id] || profile;
+      if (profile) { try { sessionStorage.setItem('sk_profile', profile.id); } catch (e) {} renderDash(); }
     }
+  }
+
+  function openChat(ask) {
+    if (session && profile && session.customerId === profile.id) {
+      showView('chatView');
+      if (ask && !busy) submitMessage(ask);
+      return;
+    }
+    pendingAsk = ask || null;
+    openSession(profile ? profile.id : 'new', false);
   }
 
   async function openSession(id, autoplay) {
     playGen++;
-    var c = E.DATA.customers[id] || null;
-    $('landing').hidden = true;
-    $('chatView').hidden = false;
-    updateWho(c);
-    $('who-case').textContent = '';
+    showView('chatView');
     var m = modeLabel();
     $('modeBadge').textContent = m.text;
     $('modeBadge').className = m.cls;
+    $('who-case').textContent = '';
     $('messages').innerHTML = '';
-    $('traceList').innerHTML = '<p class="empty-note">Rule checks appear here as the agent replies.</p>';
+    $('traceList').innerHTML = '<p class="empty-note">Rule checks appear here as Aria replies.</p>';
     $('ledgerList').innerHTML = '<p class="empty-note">No actions on this booking yet.</p>';
     $('escList').innerHTML = '<p class="empty-note">No escalations raised.</p>';
     $('traceCount').textContent = '0';
@@ -172,16 +286,14 @@
     $('userInput').value = '';
     setBusy(true);
 
-    var opening;
+    var opening = null;
     if (serverMode) {
       try {
         var data = await apiStart(id);
         session = { kind: 'api', id: data.sessionId, caseId: data.caseId, customerId: id, turn: 0 };
         if (data.caseId) $('who-case').textContent = data.caseId;
         opening = data;
-      } catch (err) {
-        serverMode = null; // degrade to local
-      }
+      } catch (err) { serverMode = null; }
     }
     if (!serverMode) {
       if (clientAI) {
@@ -193,7 +305,7 @@
       } else if (id === 'new') {
         session = null;
         showTyping(false);
-        addBubble('agent', 'The new-customer flow needs the AI agent — run `node server.js` locally, or retry once you’re online (the free in-browser LLM could not be reached). The three passenger chats still work here.');
+        addBubble('agent', 'The new-customer flow needs the AI agent — run node server.js locally, or retry once you’re online.');
         setBusy(false);
         return;
       } else {
@@ -203,11 +315,12 @@
     }
 
     if (session && id !== 'new') {
-      addTicketCards(id); // the booking, straight from the data pack, as a boarding pass
+      addTicketCards(id);
       session.ticketShown = true;
     }
     await renderAgentTurn(opening, 'Session opened', 300);
     setBusy(false);
+    if (pendingAsk) { var ask = pendingAsk; pendingAsk = null; submitMessage(ask); return; }
     if (autoplay) runAutoplay(playGen);
   }
 
@@ -217,67 +330,19 @@
     $('sendBtn').disabled = b;
   }
 
-  /* ---------- rendering ---------- */
-
-  /* subtle message sounds (WebAudio — no files, starts after first user gesture) */
-  var actx = null;
-  function blip(freq, gain) {
-    try {
-      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-      if (actx.state === 'suspended') { actx.resume(); }
-      var o = actx.createOscillator();
-      var v = actx.createGain();
-      o.type = 'sine';
-      o.frequency.value = freq;
-      v.gain.setValueAtTime(gain, actx.currentTime);
-      v.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.12);
-      o.connect(v);
-      v.connect(actx.destination);
-      o.start();
-      o.stop(actx.currentTime + 0.13);
-    } catch (e) { /* audio unavailable — silent */ }
-  }
-
   function addBubble(kind, text) {
     var m = $('messages');
     var el = document.createElement('div');
     el.className = 'msg msg-' + kind;
-    el.textContent = text;
+    el.innerHTML = fmt(text);
     m.appendChild(el);
     var t = document.createElement('div');
     t.className = 'msg-time t-' + kind;
-    t.textContent = (kind === 'agent' ? 'Agent · ' : '') + now();
+    t.textContent = (kind === 'agent' ? 'Aria · ' : '') + now();
     m.appendChild(t);
     m.scrollTop = m.scrollHeight;
     blip(kind === 'agent' ? 880 : 520, kind === 'agent' ? 0.05 : 0.06);
-  }
-
-  /* boarding-pass cards — the customer's booking exactly as in the data pack */
-  function addTicketCards(customerId) {
-    var m = $('messages');
-    E.DATA.bookings.filter(function (b) { return b.customer === customerId; }).forEach(function (b) {
-      var cities = b.route.split('→').map(function (s) { return s.trim().toUpperCase(); });
-      var el = document.createElement('div');
-      el.className = 'ticket';
-      var stampCls = 'stamp-' + b.status;
-      var stampTxt = b.status === 'cancelled' ? 'Cancelled' : (b.status === 'delayed' ? 'Delayed ' + b.delayHours + 'h' : 'On schedule');
-      el.innerHTML =
-        '<div class="stub"><svg width="18" height="18" viewBox="0 0 26 26"><path d="M2 20 L13 4 L16 9 L24 20 L16 16 L10 20 Z" fill="#ffffff"/></svg><span class="air">SK AIRWAYS</span></div>' +
-        '<div class="tmain">' +
-          '<div class="trow1"><span class="route">' + esc(cities[0]) + '<span class="arr">→</span>' + esc(cities[1] || '') + '</span>' +
-          '<span class="fno">' + esc(b.flight) + '</span></div>' +
-          '<div class="tgrid">' +
-            '<div class="tf"><div class="k">Date</div><div class="v">' + esc(b.date) + '</div></div>' +
-            '<div class="tf"><div class="k">Scheduled</div><div class="v' + (b.newDep ? ' strike' : '') + '">' + esc(b.dep) + '</div></div>' +
-            (b.newDep ? '<div class="tf"><div class="k">New departure</div><div class="v">' + esc(b.newDep) + '</div></div>' : '') +
-            '<div class="tf"><div class="k">Status</div><div class="v">' + esc(b.statusText) + '</div></div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="tside"><span class="stamp ' + stampCls + '">' + esc(stampTxt) + '</span>' +
-          '<span class="tpnr">PNR ' + esc(b.pnr) + '</span></div>';
-      m.appendChild(el);
-    });
-    m.scrollTop = m.scrollHeight;
+    buzz(kind === 'agent' ? 14 : 8);
   }
 
   function showTyping(show) {
@@ -310,10 +375,7 @@
     lbl.className = 'turn-label';
     lbl.textContent = turnLabel;
     group.appendChild(lbl);
-    var labels = {
-      data: 'Data', info: 'Note', allowed: 'Allowed', action: 'Action',
-      blocked: 'Blocked', supervisor: 'Supervisor', escalated: 'Escalated'
-    };
+    var labels = { data: 'Data', info: 'Note', allowed: 'Allowed', action: 'Action', blocked: 'Blocked', supervisor: 'Supervisor', escalated: 'Escalated' };
     out.trace.forEach(function (t) {
       var e = document.createElement('div');
       e.className = 'trace-entry';
@@ -349,24 +411,30 @@
       });
       $('escCount').textContent = String(parseInt($('escCount').textContent, 10) + out.escalations.length);
     }
-    var escalated = out.fullEscalated || (session && session.kind === 'local' && session.state.fullEscalated);
+    var escalated = out.fullEscalated || (session && session.kind !== 'api' && session.state && session.state.fullEscalated);
     if (escalated) $('escBanner').classList.add('show');
   }
 
   function addResolutionCard(out) {
     var m = $('messages');
-    var el = document.createElement('div');
-    el.className = 'rescard';
-    var rows = '';
-    (out.actions || []).forEach(function (a) {
-      rows += '<div class="rescard-row ok"><span>✓</span><div>' + esc(a.label) + ' <span class="rid">' + esc(a.id) + '</span></div></div>';
-    });
+    if (out.actions && out.actions.length) {
+      var el = document.createElement('div');
+      el.className = 'rescard';
+      var rows = out.actions.map(function (a) {
+        return '<div class="rescard-row ok"><span>✓</span><div>' + esc(a.label) + ' <span class="rid">' + esc(a.id) + '</span></div></div>';
+      }).join('');
+      var caseRef = session && session.caseId ? ' · <span class="rid">' + esc(session.caseId) + '</span>' : '';
+      el.innerHTML = '<div class="rescard-title">Done for you' + caseRef + '</div>' + rows;
+      m.appendChild(el);
+    }
     (out.escalations || []).forEach(function (t) {
-      rows += '<div class="rescard-row esc"><span>⤴</span><div>' + esc(t.label) + ' <span class="rid">' + esc(t.id) + '</span></div></div>';
+      var el = document.createElement('div');
+      el.className = 'tkr';
+      el.innerHTML = '<div class="ic">🎫</div><div><b>Ticket raised</b> <span class="id">' + esc(t.id) + '</span>' +
+        '<p>A human agent is reviewing this — the decision will appear right here and on your dashboard.</p></div>';
+      m.appendChild(el);
+      blip(660, 0.06); buzz(20);
     });
-    var caseRef = session && session.caseId ? ' · <span class="rid">' + esc(session.caseId) + '</span>' : '';
-    el.innerHTML = '<div class="rescard-title">Resolution update' + caseRef + '</div>' + rows;
-    m.appendChild(el);
     m.scrollTop = m.scrollHeight;
   }
 
@@ -386,44 +454,21 @@
     if (out.customer) {
       updateWho(out.customer);
       if (session && !session.ticketShown) {
-        addTicketCards(out.customer.id); // identity just verified — show the boarding pass
+        addTicketCards(out.customer.id);
         session.ticketShown = true;
       }
     }
-    if ((out.actions && out.actions.length) || (out.escalations && out.escalations.length)) {
-      addResolutionCard(out);
-    }
+    addResolutionCard(out);
     renderTrace(out, turnLabel);
     renderLedger(out);
-    if (out.chips) renderChips(out.chips); // supervisor notices carry no chips — keep the current ones
-  }
-
-  /* ---------- supervisor updates (human-in-the-loop) ---------- */
-
-  async function pollNotices() {
-    if (!session || session.kind !== 'api' || busy) return;
-    try {
-      var r = await fetch('/api/notices?sessionId=' + encodeURIComponent(session.id));
-      if (!r.ok) return;
-      var data = await r.json();
-      var notices = data.notices || [];
-      if (!notices.length) return;
-      setBusy(true);
-      for (var i = 0; i < notices.length; i++) {
-        await renderAgentTurn(notices[i], 'Supervisor decision · Resolution Console', 200);
-      }
-      if (data.fullEscalated) $('escBanner').classList.add('show');
-      setBusy(false);
-    } catch (e) { /* server briefly unreachable — next poll retries */ }
+    if (out.chips) renderChips(out.chips);
+    speakParts(parts, out);
   }
 
   /* ---------- message flow ---------- */
 
   async function sendToAgent(text) {
-    if (session.kind === 'api') {
-      session.turn++;
-      return apiSend(text);
-    }
+    if (session.kind === 'api') { session.turn++; return apiSend(text); }
     if (session.kind === 'client') {
       var out = await window.AgentFree.runTurn(session.state, text, clientAI);
       var c = session.state.customer;
@@ -451,6 +496,7 @@
       var out = await sendToAgent(text);
       var label = 'T' + turnNumber() + ' · “' + (text.length > 44 ? text.slice(0, 44) + '…' : text) + '”';
       await renderAgentTurn(out, label, 500);
+      pollMyCases();
     } catch (err) {
       showTyping(false);
       addBubble('agent', '⚠ ' + (err.message || 'Something went wrong — please try again.'));
@@ -483,57 +529,172 @@
     }
   }
 
+  /* ---------- supervisor updates ---------- */
+
+  async function pollNotices() {
+    if (!session || session.kind !== 'api' || busy) return;
+    try {
+      var r = await fetch('/api/notices?sessionId=' + encodeURIComponent(session.id));
+      if (!r.ok) return;
+      var data = await r.json();
+      var notices = data.notices || [];
+      if (!notices.length) return;
+      setBusy(true);
+      for (var i = 0; i < notices.length; i++) {
+        await renderAgentTurn(notices[i], 'Supervisor decision · Resolution Console', 200);
+      }
+      if (data.fullEscalated) $('escBanner').classList.add('show');
+      setBusy(false);
+      pollMyCases();
+    } catch (e) { /* retry next poll */ }
+  }
+
+  /* ---------- voice mode (natural TTS via /api/tts, browser fallback) ---------- */
+
+  var voiceOn = false;
+  var audioEl = null;
+
+  function setVoice(on) {
+    voiceOn = on;
+    $('voiceOverlay').classList.toggle('show', on);
+    if (!on) {
+      $('voiceOverlay').classList.remove('speaking');
+      if (audioEl) { try { audioEl.pause(); } catch (e) {} audioEl = null; }
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+    } else {
+      $('voiceStatus').textContent = 'Listening to the conversation';
+    }
+  }
+
+  function pickBrowserVoice() {
+    try {
+      var vs = window.speechSynthesis.getVoices() || [];
+      return vs.find(function (v) { return /en/i.test(v.lang) && /(natural|neural|online)/i.test(v.name); }) ||
+             vs.find(function (v) { return /en/i.test(v.lang) && /google/i.test(v.name); }) ||
+             vs.find(function (v) { return /^en/i.test(v.lang); }) || null;
+    } catch (e) { return null; }
+  }
+
+  async function speakParts(parts, out) {
+    if (!voiceOn || !parts || !parts.length) return;
+    var text = parts.join(' ').replace(/\*\*/g, '').slice(0, 580);
+    $('voiceText').textContent = text;
+    var cards = [];
+    (out && out.actions || []).forEach(function (a) { cards.push('<span class="pill" style="background:var(--good-bg);color:var(--good)">✓ ' + esc(a.id) + '</span>'); });
+    (out && out.escalations || []).forEach(function (t) { cards.push('<span class="pill" style="background:var(--warn-bg);color:var(--warn)">🎫 ' + esc(t.id) + '</span>'); });
+    $('voiceCards').innerHTML = cards.join('');
+    $('voiceOverlay').classList.add('speaking');
+    $('voiceStatus').textContent = 'Aria is speaking';
+    var done = function () {
+      $('voiceOverlay').classList.remove('speaking');
+      $('voiceStatus').textContent = 'Listening to the conversation';
+    };
+    try {
+      var r = await fetch('/api/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text })
+      });
+      if (!r.ok) throw new Error('tts unavailable');
+      var blob = await r.blob();
+      audioEl = new Audio(URL.createObjectURL(blob));
+      audioEl.onended = done;
+      audioEl.onerror = done;
+      await audioEl.play();
+      return;
+    } catch (e) { /* fall back to browser speech */ }
+    try {
+      var u = new SpeechSynthesisUtterance(text);
+      var v = pickBrowserVoice();
+      if (v) u.voice = v;
+      u.rate = 1.02;
+      u.onend = done;
+      u.onerror = done;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch (e) { done(); }
+  }
+
   /* ---------- wiring ---------- */
 
   document.addEventListener('DOMContentLoaded', async function () {
-    buildLanding();
+    // login
+    $('loginInput').addEventListener('focus', function () { renderLoginList($('loginInput').value); });
+    $('loginInput').addEventListener('input', function () { renderLoginList($('loginInput').value); });
+    $('loginInput').addEventListener('blur', function () { setTimeout(function () { $('loginList').classList.remove('show'); }, 150); });
+    $('loginInput').addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter') return;
+      var q = $('loginInput').value.trim().toLowerCase();
+      var match = Object.keys(E.DATA.customers).map(function (id) { return E.DATA.customers[id]; })
+        .filter(function (c) { return c.name.toLowerCase().indexOf(q) !== -1 || c.pnr.toLowerCase().indexOf(q) !== -1; });
+      if (match.length === 1) login(match[0].id);
+    });
+    $('logoutBtn').addEventListener('click', logout);
 
+    // dashboard
+    $('dashChatBtn').addEventListener('click', function () { openChat(null); });
+    $('dashVoiceBtn').addEventListener('click', function () { setVoice(true); openChat(null); });
+
+    // chat
     $('sendBtn').addEventListener('click', function () { submitMessage($('userInput').value); });
     $('userInput').addEventListener('keydown', function (ev) {
       if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); submitMessage($('userInput').value); }
     });
-
     $('backBtn').addEventListener('click', function () {
       playGen++;
-      session = null;
-      $('chatView').hidden = true;
-      $('landing').hidden = false;
-      $('inspector').classList.remove('open');
+      setVoice(false);
+      if (profile) { renderDash(); showView('dashView'); pollMyCases(); } else { showView('loginView'); }
     });
     $('restartBtn').addEventListener('click', function () {
       if (session) openSession(session.customerId, false);
     });
-    $('consoleToggle').addEventListener('click', function () {
-      $('inspector').classList.toggle('open');
-    });
+    $('consoleToggle').addEventListener('click', function () { $('inspector').classList.toggle('open'); });
+    $('voiceBtn').addEventListener('click', function () { setVoice(!voiceOn); });
+    $('voiceClose').addEventListener('click', function () { setVoice(false); });
 
-    function bindModal(openIds, overlayId, closeId) {
-      openIds.forEach(function (oid) {
-        $(oid).addEventListener('click', function () { $(overlayId).classList.add('show'); });
-      });
+    // modals
+    function bindModal(openId, overlayId, closeId) {
+      $(openId).addEventListener('click', function () { $(overlayId).classList.add('show'); });
       $(closeId).addEventListener('click', function () { $(overlayId).classList.remove('show'); });
       $(overlayId).addEventListener('click', function (ev) {
         if (ev.target === $(overlayId)) $(overlayId).classList.remove('show');
       });
     }
-    bindModal(['dataBtn', 'dataBtn2'], 'dataOverlay', 'dataClose');
-    bindModal(['howBtn', 'howBtn2'], 'howOverlay', 'howClose');
+    bindModal('dataBtn', 'dataOverlay', 'dataClose');
+    bindModal('howBtn', 'howOverlay', 'howClose');
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape') {
         $('dataOverlay').classList.remove('show');
         $('howOverlay').classList.remove('show');
+        setVoice(false);
       }
     });
 
     setInterval(pollNotices, 4000);
+    setInterval(pollMyCases, 6000);
+    try { window.speechSynthesis.getVoices(); } catch (e) {}
 
-    // Everything above is interactive immediately; mode detection (and the
-    // keyless-LLM probe on static hosting) runs after, capped at ~8s.
     await detectServer();
 
-    // deep link: ?p=priya|arvind|meher|new & play=1 opens a session directly
+    // restore login / deep links (?p=priya|arvind|meher|new & play=1)
     var qs = new URLSearchParams(location.search);
     var qp = qs.get('p');
-    if (qp && (E.DATA.customers[qp] || qp === 'new')) openSession(qp, qs.get('play') === '1');
+    var saved = null;
+    try { saved = sessionStorage.getItem('sk_profile'); } catch (e) {}
+    if (qp && E.DATA.customers[qp]) {
+      profile = E.DATA.customers[qp];
+      try { sessionStorage.setItem('sk_profile', qp); } catch (e) {}
+      renderDash();
+      if (qs.get('view') === 'dash') { showView('dashView'); pollMyCases(); }
+      else openSession(qp, qs.get('play') === '1');
+    } else if (qp === 'new') {
+      openSession('new', false);
+    } else if (saved && E.DATA.customers[saved]) {
+      profile = E.DATA.customers[saved];
+      renderDash();
+      showView('dashView');
+      pollMyCases();
+    } else {
+      showView('loginView');
+    }
   });
 })();
