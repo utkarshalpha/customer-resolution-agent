@@ -459,7 +459,7 @@ const server = http.createServer(async (req, res) => {
         const up = await fetch('https://api.groq.com/openai/v1/audio/speech', {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'canopylabs/orpheus-v1-english', input: text, voice: 'tara', response_format: 'wav' })
+          body: JSON.stringify({ model: 'canopylabs/orpheus-v1-english', input: text, voice: process.env.TTS_VOICE || 'diana', response_format: 'wav' })
         });
         if (!up.ok) {
           const msg = (await up.text()).slice(0, 200);
