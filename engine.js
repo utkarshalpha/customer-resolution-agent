@@ -117,7 +117,7 @@ function openingMessage(state) {
   var c = state.customer;
   var out = makeOut();
   var d = disruptedBooking(c.id);
-  var msg = 'Hello ' + c.first + ', I’m the ' + DATA.airline + ' virtual resolution agent. You’re verified on booking ' + c.pnr + ' (' + c.tier + ' tier).';
+  var msg = 'Hi ' + c.first + ', I’m Aria, your ' + DATA.airline + ' virtual resolution agent. You’re verified on booking ' + c.pnr + ' (' + c.tier + ' tier).';
   trace(out, '§1 Customer profile', c.name + ' · ' + c.tier + ' · PNR ' + c.pnr, 'data');
   if (d) {
     if (d.status === 'cancelled') {
@@ -239,6 +239,8 @@ function handleMessage(state, raw) {
     human: /\bhuman\b|real person|\brepresentative\b|supervisor|manager|escalate|someone senior|speak to (a|an|your)/.test(text),
     missed: /i missed (my|the) flight|missed check(-| )?in|i was late/.test(text),
     greet: /^(hi|hello|hey|good (morning|afternoon|evening))\b/.test(text),
+    whoAreYou: /who are you|what are you\b|your name|are you (a |an )?(bot|robot|human|ai|machine|real)/.test(text),
+    howAreYou: /how are you|how('s| is) it going|how are things|how do you do|hope you('re| are)/.test(text),
     thanks: /thank|thanks|that works|sounds good|perfect/.test(text),
     bye: /\bbye\b|goodbye|that('s| is) all/.test(text),
     yes: /^(yes|yeah|yep|sure|please do|go ahead|do it|ok(ay)?[,.! ]|fine[,.! ])/.test(text) || /^(yes|ok|okay|fine|sure)$/.test(text),
@@ -246,7 +248,7 @@ function handleMessage(state, raw) {
     payAgree: /i('|’)?ll pay|pay the difference|charge (me|it)|happy to pay|i can pay|i will pay/.test(text),
     stayPut: /stay on|keep my (seat|flight|booking)|wait for (it|the flight)|i('|’)?ll wait/.test(text),
     returnFlight: /return (flight|trip|leg)|flight (back|home)|back to delhi|goa\s*(→|to|-)\s*delhi/.test(text),
-    status: /\bstatus\b|what('s| is) (going on|happening)|what happened|why (is|was)|cancel+ed|delay/.test(text)
+    status: /\bstatus\b|what('s| is) (going on|happening)|what('s| is) (the |my )?(issue|problem|matter)|what happened|why (is|was)|cancel+ed|delay/.test(text)
   };
   var angry = /(furious|angry|unacceptable|ridiculous|worst|terrible|pathetic|fed up|frustrat|awful|disgust|derail|ruined|mess\b|nightmare)/.test(text);
 
@@ -574,8 +576,14 @@ function handleMessage(state, raw) {
         s += ' ' + entitlementSentence(state, granted14);
       }
       out.parts.push(s);
+    } else if (W.whoAreYou) {
+      trace(out, 'Session', 'Identity question — agent introduction', 'info');
+      out.parts.push('I’m Aria, the ' + DATA.airline + ' virtual resolution agent — an AI assistant that helps with disrupted flights: status, rebooking, refunds and delay assistance. For anything beyond airline policy I bring in a human supervisor. How can I help you today, ' + c.first + '?');
+    } else if (W.howAreYou) {
+      trace(out, 'Session', 'Courtesy exchange', 'info');
+      out.parts.push('I’m doing well, thank you for asking, ' + c.first + '! More importantly, how are you holding up with today’s disruption? Tell me what you need and I’ll get right on it.');
     } else if (W.greet) {
-      out.parts.push('Hello ' + c.first + '! You’re verified on booking ' + c.pnr + '. I can help with flight status, rebooking, refunds and delay assistance — what can I do for you?');
+      out.parts.push('Hi ' + c.first + '! I’m Aria, your ' + DATA.airline + ' virtual resolution agent — you’re verified on booking ' + c.pnr + '. I can help with flight status, rebooking, refunds and delay assistance. What can I do for you?');
     } else if (W.thanks || W.bye) {
       trace(out, 'Session', 'Courtesy close', 'info');
       out.parts.push('You’re very welcome, ' + c.first + '. Everything we’ve set up is confirmed to ' + c.email + '. Safe travels — and I’m here if anything else comes up.');

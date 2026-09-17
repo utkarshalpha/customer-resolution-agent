@@ -224,6 +224,17 @@ function rulesUnboundTurn(entry, text) {
   }
   const b = findPnrInText(text);
   if (!b) {
+    const low = text.toLowerCase();
+    if (/who are you|what are you\b|your name|are you (a |an )?(bot|robot|human|ai|machine|real)/.test(low)) {
+      out.trace.push({ rule: 'Session', detail: 'Identity question — agent introduction', verdict: 'info' });
+      out.parts = ['I’m Aria, SK Airways’ virtual resolution agent — an AI assistant for disrupted flights: rebooking, refunds and delay assistance. Anything beyond airline policy goes to a human supervisor. Could you share your booking reference (PNR) or your name so I can pull up your details?'];
+      return out;
+    }
+    if (/how are you|how('s| is) it going|how do you do/.test(low)) {
+      out.trace.push({ rule: 'Session', detail: 'Courtesy exchange', verdict: 'info' });
+      out.parts = ['I’m doing well, thank you for asking! I hope your day is going smoothly too. If a flight has been disrupted, share your booking reference (PNR) or your name and I’ll pull up your details.'];
+      return out;
+    }
     out.trace.push({ rule: '§1 Identity', detail: 'No booking reference recognised in the message — asking again', verdict: 'info' });
     out.parts = ['I’d be glad to help. Could you share your booking reference (PNR) from your confirmation email so I can pull up your details?'];
     return out;

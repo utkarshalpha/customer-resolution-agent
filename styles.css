@@ -305,6 +305,20 @@ a.textlink:hover { text-decoration: underline; }
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
+.backarrow {
+  flex: none;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.backarrow:hover { background: var(--tint); border-color: #c9d4ee; }
 .chathead .who { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .chathead .who .avatar { width: 34px; height: 34px; font-size: 12px; }
 .chathead .who .nm { font-weight: 600; font-size: 14.5px; white-space: nowrap; }
@@ -934,9 +948,13 @@ a.textlink:hover { text-decoration: underline; }
   background: radial-gradient(circle at 35% 30%, #16245c, #0a1230 70%);
 }
 .voiceoverlay.speaking .orb { animation: orbspin 2.2s linear infinite, orbpulse 0.9s ease-in-out infinite; }
+.voiceoverlay.listening .orb {
+  animation: orbspin 10s linear infinite, orbpulse 1.8s ease-in-out infinite;
+  box-shadow: 0 0 80px rgba(120, 220, 170, 0.4);
+}
 @keyframes orbspin { to { transform: rotate(360deg); } }
 @keyframes orbpulse { 0%, 100% { scale: 1; } 50% { scale: 1.09; } }
-@media (prefers-reduced-motion: reduce) { .orb, .voiceoverlay.speaking .orb { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .orb, .voiceoverlay.speaking .orb, .voiceoverlay.listening .orb { animation: none; } }
 .voicename { font-size: 15px; font-weight: 650; letter-spacing: 0.05em; color: #fff; }
 .voicestatus { font-size: 12.5px; color: #8fa0cc; letter-spacing: 0.08em; text-transform: uppercase; }
 .voicetext { max-width: 640px; font-size: 16.5px; line-height: 1.6; color: #dfe6f8; min-height: 54px; }
@@ -960,32 +978,57 @@ a.textlink:hover { text-decoration: underline; }
 .mtile p { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
 .chiprow { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
 
-/* ---------- responsive ---------- */
-.console-toggle { display: none; }
+/* ---------- console: opt-in drawer on every screen size ---------- */
+.workspace { grid-template-columns: 1fr; }
+.chatcol {
+  border-right: none;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+}
+.inspector {
+  position: fixed;
+  top: 57px;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 92vw);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  transform: translateX(105%);
+  transition: transform 0.25s ease;
+  z-index: 60;
+}
+@media (prefers-reduced-motion: reduce) {
+  .inspector { transition: none; }
+}
+.inspector.open { transform: none; }
+.console-toggle { display: inline-flex; align-items: center; gap: 6px; }
 @media (max-width: 1000px) {
-  .workspace { grid-template-columns: 1fr; }
-  .inspector {
-    position: fixed;
-    top: 57px;
-    right: 0;
-    bottom: 0;
-    width: min(400px, 92vw);
-    border-left: 1px solid var(--line);
-    box-shadow: var(--shadow);
-    transform: translateX(105%);
-    transition: transform 0.25s ease;
-    z-index: 60;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .inspector { transition: none; }
-  }
-  .inspector.open { transform: none; }
-  .console-toggle { display: inline-flex; align-items: center; gap: 6px; }
-  .chatcol { border-right: none; }
   .msg { max-width: 88%; }
 }
+
+/* message grouping: one sender label per run of bubbles */
+.msg-time.ghost { display: none; }
+.msg + .msg { margin-top: 2px; }
+.msg.msg-agent { box-shadow: 0 1px 3px rgba(0, 24, 113, 0.05); }
+.chathint {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 2px 6px 10px;
+}
+.msg .caret {
+  display: inline-block;
+  width: 7px; height: 15px;
+  background: var(--link);
+  vertical-align: -2px;
+  margin-left: 2px;
+  animation: caretblink 0.8s steps(1) infinite;
+}
+@keyframes caretblink { 50% { opacity: 0; } }
 @media (max-width: 640px) {
   .brand-sub, .datechip { display: none; }
+  .chathead .who .pnr { display: none; }
   .hero { padding: 26px 18px 30px; }
   .landing-body { padding: 22px 18px 40px; }
 }

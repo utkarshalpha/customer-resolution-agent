@@ -20,6 +20,9 @@
   function sleep(ms) {
     return new Promise(function (res) { setTimeout(res, reduceMotion ? Math.min(ms, 120) : ms); });
   }
+  function rawSleep(ms) {
+    return new Promise(function (res) { setTimeout(res, ms); });
+  }
   function now() {
     var d = new Date();
     return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
@@ -190,9 +193,17 @@
     E.DATA.bookings.filter(function (b) { return b.customer === customerId; }).forEach(function (b) {
       var el = document.createElement('div');
       el.className = 'ticket';
+      el.setAttribute('role', 'button');
+      el.tabIndex = 0;
+      el.style.cursor = 'pointer';
       el.innerHTML = ticketHTML(b);
+      var ask = b.status === 'unaffected'
+        ? 'Is my ' + b.route + ' flight on ' + b.date + ' still on schedule?'
+        : 'What are my options for flight ' + b.flight + '?';
+      el.addEventListener('click', function () { if (!busy) submitMessage(ask); });
       m.appendChild(el);
     });
+    resetGroup();
     m.scrollTop = m.scrollHeight;
   }
 
@@ -221,9 +232,23 @@
     });
   }
 
+  /* offline mirror of tickets/actions so the dashboard stays live without the server */
+  var localFeed = [];
+  function renderLocalFeed() {
+    var box = $('dashCases');
+    if (!box) return;
+    var items = localFeed.map(function (f) {
+      if (f.kind === 'tk') return '<div class="feeditem tk"><span class="id">' + esc(f.id) + '</span><span>' + esc(f.label) + '</span><span class="st open">OPEN</span></div>';
+      return '<div class="feeditem"><span class="id">' + esc(f.id) + '</span><span>' + esc(f.label) + '</span></div>';
+    });
+    box.innerHTML = items.length ? items.slice(0, 10).join('')
+      : '<p class="empty-note">Nothing yet — raised tickets and agent actions appear here, live.</p>';
+  }
+
   var myCasesTimer = null;
   async function pollMyCases() {
-    if (!profile || !serverMode) return;
+    if (!profile) return;
+    if (!serverMode) { renderLocalFeed(); return; }
     try {
       var r = await fetch('/api/mycases?customer=' + encodeURIComponent(profile.id));
       if (!r.ok) return;
@@ -314,9 +339,11 @@
       }
     }
 
+    resetGroup();
     if (session && id !== 'new') {
       addTicketCards(id);
       session.ticketShown = true;
+      addHint('Tap a flight above for help with it, pick a suggestion below, or just type.');
     }
     await renderAgentTurn(opening, 'Session opened', 300);
     setBusy(false);
@@ -330,19 +357,66 @@
     $('sendBtn').disabled = b;
   }
 
+  /* consecutive bubbles from the same sender share one "Aria · time" label */
+  var lastBubbleKind = null, lastTimeEl = null;
+  function resetGroup() { lastBubbleKind = null; lastTimeEl = null; }
+  function pushTime(kind) {
+    var t = document.createElement('div');
+    t.className = 'msg-time t-' + kind;
+    t.textContent = (kind === 'agent' ? 'Aria · ' : '') + now();
+    if (lastBubbleKind === kind && lastTimeEl) lastTimeEl.classList.add('ghost');
+    lastBubbleKind = kind;
+    lastTimeEl = t;
+    return t;
+  }
+
   function addBubble(kind, text) {
     var m = $('messages');
     var el = document.createElement('div');
     el.className = 'msg msg-' + kind;
     el.innerHTML = fmt(text);
     m.appendChild(el);
-    var t = document.createElement('div');
-    t.className = 'msg-time t-' + kind;
-    t.textContent = (kind === 'agent' ? 'Aria · ' : '') + now();
-    m.appendChild(t);
+    m.appendChild(pushTime(kind));
     m.scrollTop = m.scrollHeight;
     blip(kind === 'agent' ? 880 : 520, kind === 'agent' ? 0.05 : 0.06);
     buzz(kind === 'agent' ? 14 : 8);
+  }
+
+  /* agent replies arrive word by word, like a real person typing */
+  async function typeBubble(text) {
+    var m = $('messages');
+    var el = document.createElement('div');
+    el.className = 'msg msg-agent';
+    m.appendChild(el);
+    m.appendChild(pushTime('agent'));
+    blip(880, 0.05); buzz(14);
+    if (reduceMotion) {
+      el.innerHTML = fmt(text);
+      m.scrollTop = m.scrollHeight;
+      return;
+    }
+    var words = text.split(/(\s+)/);
+    var visible = words.filter(function (w) { return w.trim(); }).length || 1;
+    var per = Math.min(34, Math.max(14, 2600 / visible));
+    var acc = '';
+    for (var i = 0; i < words.length; i++) {
+      acc += words[i];
+      if (!words[i].trim()) continue;
+      el.innerHTML = esc(acc).replace(/\n/g, '<br>') + '<span class="caret"></span>';
+      m.scrollTop = m.scrollHeight;
+      await rawSleep(per);
+    }
+    el.innerHTML = fmt(text);
+    m.scrollTop = m.scrollHeight;
+  }
+
+  function addHint(text) {
+    var m = $('messages');
+    var el = document.createElement('div');
+    el.className = 'chathint';
+    el.textContent = text;
+    m.appendChild(el);
+    resetGroup();
   }
 
   function showTyping(show) {
@@ -435,19 +509,20 @@
       m.appendChild(el);
       blip(660, 0.06); buzz(20);
     });
+    if ((out.actions && out.actions.length) || (out.escalations && out.escalations.length)) resetGroup();
     m.scrollTop = m.scrollHeight;
   }
 
   async function renderAgentTurn(out, turnLabel, baseDelay) {
     showTyping(true);
-    await sleep(baseDelay + Math.min(1200, (out.parts || []).join(' ').length * 6));
+    await sleep(Math.min(baseDelay, 500) + 350);
     showTyping(false);
     var parts = out.parts || [];
     for (var i = 0; i < parts.length; i++) {
-      addBubble('agent', parts[i]);
+      await typeBubble(parts[i]);
       if (i < parts.length - 1) {
         showTyping(true);
-        await sleep(500 + Math.min(900, parts[i + 1].length * 4));
+        await sleep(450);
         showTyping(false);
       }
     }
@@ -461,6 +536,10 @@
     addResolutionCard(out);
     renderTrace(out, turnLabel);
     renderLedger(out);
+    if (!serverMode) {
+      (out.escalations || []).forEach(function (t) { localFeed.unshift({ kind: 'tk', id: t.id, label: t.label }); });
+      (out.actions || []).forEach(function (a) { localFeed.unshift({ kind: 'act', id: a.id, label: a.label }); });
+    }
     if (out.chips) renderChips(out.chips);
     speakParts(parts, out);
   }
@@ -483,6 +562,21 @@
     return session.kind === 'api' ? session.turn : session.state.turn;
   }
 
+  /* feedback while the AI thinks: dots at once, a reassurance line if it runs long */
+  var slowTimer = null;
+  function startWorking() {
+    showTyping(true);
+    slowTimer = setTimeout(function () {
+      slowTimer = null;
+      addHint('Aria is on it — pulling up your booking and checking the policy details…');
+      var m = $('messages'); m.scrollTop = m.scrollHeight;
+    }, 6000);
+  }
+  function stopWorking() {
+    if (slowTimer) { clearTimeout(slowTimer); slowTimer = null; }
+    showTyping(false);
+  }
+
   async function submitMessage(text) {
     if (!session || busy) return;
     text = (text || '').trim();
@@ -492,13 +586,15 @@
     renderChips([]);
     addBubble('user', text);
     $('userInput').value = '';
+    startWorking();
     try {
       var out = await sendToAgent(text);
+      stopWorking();
       var label = 'T' + turnNumber() + ' · “' + (text.length > 44 ? text.slice(0, 44) + '…' : text) + '”';
       await renderAgentTurn(out, label, 500);
       pollMyCases();
     } catch (err) {
-      showTyping(false);
+      stopWorking();
       addBubble('agent', '⚠ ' + (err.message || 'Something went wrong — please try again.'));
     }
     setBusy(false);
@@ -514,12 +610,14 @@
       setBusy(true);
       renderChips([]);
       addBubble('user', script[i]);
+      startWorking();
       try {
         var out = await sendToAgent(script[i]);
+        stopWorking();
         var label = 'T' + turnNumber() + ' · “' + (script[i].length > 44 ? script[i].slice(0, 44) + '…' : script[i]) + '”';
         await renderAgentTurn(out, label, 500);
       } catch (err) {
-        showTyping(false);
+        stopWorking();
         addBubble('agent', '⚠ ' + (err.message || 'The agent call failed.'));
         setBusy(false);
         return;
@@ -553,16 +651,27 @@
 
   var voiceOn = false;
   var audioEl = null;
+  var subTimer = null;
+  var speakGen = 0; // a new speak cancels any previous one
+
+  function stopSpeak() {
+    speakGen++;
+    if (subTimer) { clearInterval(subTimer); subTimer = null; }
+    if (audioEl) { try { audioEl.pause(); } catch (e) {} audioEl = null; }
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    $('voiceOverlay').classList.remove('speaking');
+  }
 
   function setVoice(on) {
     voiceOn = on;
     $('voiceOverlay').classList.toggle('show', on);
     if (!on) {
-      $('voiceOverlay').classList.remove('speaking');
-      if (audioEl) { try { audioEl.pause(); } catch (e) {} audioEl = null; }
-      try { window.speechSynthesis.cancel(); } catch (e) {}
+      stopSpeak();
+      stopListening();
     } else {
       $('voiceStatus').textContent = 'Listening to the conversation';
+      // greet immediately — confirms the audio path and unlocks playback
+      speakParts(['Voice mode is on. Hi, I’m Aria — how can I help you today?'], null);
     }
   }
 
@@ -575,43 +684,137 @@
     } catch (e) { return null; }
   }
 
+  function splitSentences(t) {
+    return (t.match(/[^.!?]+[.!?]+[\s"']*|[^.!?]+$/g) || [t]).map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
   async function speakParts(parts, out) {
     if (!voiceOn || !parts || !parts.length) return;
-    var text = parts.join(' ').replace(/\*\*/g, '').slice(0, 580);
-    $('voiceText').textContent = text;
+    stopSpeak();
+    stopListening();
+    var gen = ++speakGen;
+    var text = parts.join(' ').replace(/\*\*/g, '').replace(/\s+/g, ' ').slice(0, 580);
+    var sents = splitSentences(text);
+    var totalChars = sents.reduce(function (a, s) { return a + s.length; }, 0) || 1;
+
     var cards = [];
     (out && out.actions || []).forEach(function (a) { cards.push('<span class="pill" style="background:var(--good-bg);color:var(--good)">✓ ' + esc(a.id) + '</span>'); });
     (out && out.escalations || []).forEach(function (t) { cards.push('<span class="pill" style="background:var(--warn-bg);color:var(--warn)">🎫 ' + esc(t.id) + '</span>'); });
     $('voiceCards').innerHTML = cards.join('');
+    $('voiceText').textContent = sents[0] || text;
     $('voiceOverlay').classList.add('speaking');
     $('voiceStatus').textContent = 'Aria is speaking';
+
     var done = function () {
+      if (gen !== speakGen) return;
+      if (subTimer) { clearInterval(subTimer); subTimer = null; }
       $('voiceOverlay').classList.remove('speaking');
       $('voiceStatus').textContent = 'Listening to the conversation';
+      $('voiceText').textContent = text; // full line stays as a recap
+      setTimeout(maybeListen, 400); // hand the turn back to the customer
     };
+
+    /* natural voice via the server (Groq Orpheus), subtitles synced to audio time */
     try {
       var r = await fetch('/api/tts', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: text })
       });
       if (!r.ok) throw new Error('tts unavailable');
+      if (gen !== speakGen) return; // superseded while fetching
       var blob = await r.blob();
       audioEl = new Audio(URL.createObjectURL(blob));
       audioEl.onended = done;
       audioEl.onerror = done;
+      subTimer = setInterval(function () {
+        if (gen !== speakGen || !audioEl || !audioEl.duration) return;
+        var f = Math.min(0.999, audioEl.currentTime / audioEl.duration);
+        var seen = 0, idx = 0;
+        for (var i = 0; i < sents.length; i++) {
+          seen += sents[i].length;
+          if (f < seen / totalChars) { idx = i; break; }
+          idx = i;
+        }
+        $('voiceText').textContent = sents[idx];
+      }, 120);
       await audioEl.play();
       return;
-    } catch (e) { /* fall back to browser speech */ }
+    } catch (e) { /* fall back to browser speech, one utterance per sentence = free subtitles */ }
+    if (gen !== speakGen) return;
     try {
-      var u = new SpeechSynthesisUtterance(text);
-      var v = pickBrowserVoice();
-      if (v) u.voice = v;
-      u.rate = 1.02;
-      u.onend = done;
-      u.onerror = done;
       window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
+      var v = pickBrowserVoice();
+      sents.forEach(function (s, i) {
+        var u = new SpeechSynthesisUtterance(s);
+        if (v) u.voice = v;
+        u.rate = 1.02;
+        u.onstart = function () { if (gen === speakGen) $('voiceText').textContent = s; };
+        if (i === sents.length - 1) { u.onend = done; u.onerror = done; }
+        window.speechSynthesis.speak(u);
+      });
     } catch (e) { done(); }
+  }
+
+  /* ---------- voice conversation: the customer talks back (Web Speech API mic) ---------- */
+
+  var recog = null, listening = false, micBlocked = false;
+
+  function ensureRecog() {
+    if (recog) return recog;
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return null;
+    recog = new SR();
+    recog.lang = 'en-IN';
+    recog.interimResults = true;
+    recog.continuous = false;
+    recog.onresult = function (ev) {
+      var interim = '', finalText = '';
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) finalText += ev.results[i][0].transcript;
+        else interim += ev.results[i][0].transcript;
+      }
+      if (interim && voiceOn && !finalText) $('voiceText').textContent = '“' + interim.trim() + '…”';
+      finalText = finalText.trim();
+      if (finalText) {
+        stopListening();
+        $('voiceText').textContent = '“' + finalText + '”';
+        $('voiceStatus').textContent = 'Aria is thinking';
+        submitMessage(finalText);
+      }
+    };
+    recog.onerror = function (ev) {
+      listening = false;
+      $('voiceOverlay').classList.remove('listening');
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+        micBlocked = true;
+        if (voiceOn) $('voiceStatus').textContent = 'Mic blocked — type in the chat, Aria still speaks';
+      }
+    };
+    recog.onend = function () {
+      listening = false;
+      $('voiceOverlay').classList.remove('listening');
+      if (voiceOn && !busy && !micBlocked) setTimeout(maybeListen, 400);
+    };
+    return recog;
+  }
+
+  function maybeListen() {
+    if (!voiceOn || busy || micBlocked || listening) return;
+    if ($('voiceOverlay').classList.contains('speaking')) return;
+    var r = ensureRecog();
+    if (!r) { $('voiceStatus').textContent = 'Voice replies are on — type in the chat to talk'; return; }
+    try {
+      r.start();
+      listening = true;
+      $('voiceOverlay').classList.add('listening');
+      $('voiceStatus').textContent = 'Listening — just speak';
+    } catch (e) { listening = false; }
+  }
+
+  function stopListening() {
+    listening = false;
+    $('voiceOverlay').classList.remove('listening');
+    if (recog) { try { recog.abort(); } catch (e) {} }
   }
 
   /* ---------- wiring ---------- */
