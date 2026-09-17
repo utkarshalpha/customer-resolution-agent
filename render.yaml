@@ -1,8 +1,9 @@
 # One-click deploy: https://render.com/deploy?repo=https://github.com/utkarshalpha/customer-resolution-agent
 # Free plan runs `node server.js` as a persistent process — required for the
 # in-memory session store, supervisor notices, and the /admin console.
-# No env vars needed (keyless free-LLM mode); add GROQ_API_KEY / GEMINI_API_KEY /
-# ANTHROPIC_API_KEY in the Render dashboard later for a faster, more reliable provider.
+# The deploy screen prompts for GROQ_API_KEY (free key from console.groq.com):
+# it powers the AI chat (GPT-OSS 120B), Whisper speech-to-text, and Orpheus
+# text-to-speech. Leave it blank to run in keyless free-LLM mode (no voice).
 services:
   - type: web
     name: customer-resolution-agent
@@ -12,3 +13,8 @@ services:
     startCommand: node server.js
     healthCheckPath: /api/health
     autoDeploy: true
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: TTS_VOICE
+        value: diana
