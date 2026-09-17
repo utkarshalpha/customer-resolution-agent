@@ -4,11 +4,25 @@ Assignment 3 (AIONOS) — a customer-facing resolution agent for a day of airlin
 set on **Wednesday, 23 September 2026**, grounded **only** in the assignment data pack.
 No invented rules, policies or customer data.
 
-**Live demo:** https://utkarshalpha.github.io/customer-resolution-agent/
-(static build — the AI agent runs *in the browser* against a keyless free LLM; if that
-endpoint is momentarily unreachable it degrades to the deterministic rules engine, so the
-demo always works. The badge in the chat header shows which is active. Run locally with
-`node server.js` for the full experience including the support console.)
+## Deploy (full functionality)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/utkarshalpha/customer-resolution-agent)
+
+**Render (free web service) is the recommended host** — the app is a single stateful Node
+process (in-memory sessions, supervisor-notice queue, the live `/admin` Resolution Console),
+so it needs a persistent runtime:
+
+- **Render free** ✅ — persistent `node server.js`, free plan, no card. One click on the
+  button above (it reads `render.yaml`), then your URL serves everything: the AI chat,
+  identity flow, and the `/admin` supervisor console with decisions flowing back into chats.
+  Free instances spin down when idle — the first request after a quiet spell takes ~1 min.
+  Optional: add `GROQ_API_KEY` or `GEMINI_API_KEY` in the dashboard for a faster provider.
+- **Vercel** ❌ for this build — serverless functions don't share memory between requests,
+  so sessions and supervisor notices would be lost mid-conversation (it would need an
+  external store like Redis/Postgres first).
+- **GitHub Pages** — static preview only (https://utkarshalpha.github.io/customer-resolution-agent/):
+  the chat works with the in-browser free LLM, but there is no server, so no case store,
+  no supervisor console, no closed-loop decisions. Use Render for the real thing.
 
 ## Run it
 
