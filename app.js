@@ -126,27 +126,9 @@
         '<p class="desc">' + esc(SCENARIOS[id]) + '</p>' +
         '<div class="card-actions">' +
           '<button class="btn btn-primary" data-open="' + id + '">Start chat</button>' +
-          '<button class="btn btn-ghost" data-play="' + id + '">Watch scenario</button>' +
         '</div>';
       wrap.appendChild(card);
     });
-
-    var newCard = document.createElement('article');
-    newCard.className = 'card';
-    newCard.innerHTML =
-      '<div class="card-head">' +
-        '<div class="avatar">?</div>' +
-        '<div><div class="card-name">New customer</div>' +
-        '<div class="card-meta"><span class="tier tier-silver">Unverified</span>' +
-        '<span class="pnr">PNR — shared in chat</span></div></div>' +
-      '</div>' +
-      '<div class="flightline"><span class="f">Identity verified in-conversation</span>' +
-        '<span class="pill pill-neutral">Agentic flow</span></div>' +
-      '<p class="desc">' + esc(NEW_DESC) + '</p>' +
-      '<div class="card-actions">' +
-        '<button class="btn btn-primary" data-open="new">Start chat</button>' +
-      '</div>';
-    wrap.appendChild(newCard);
 
     wrap.addEventListener('click', function (ev) {
       var t = ev.target.closest('button');
@@ -226,6 +208,10 @@
       }
     }
 
+    if (session && id !== 'new') {
+      addTicketCards(id); // the booking, straight from the data pack, as a boarding pass
+      session.ticketShown = true;
+    }
     await renderAgentTurn(opening, 'Session opened', 300);
     setBusy(false);
     if (autoplay) runAutoplay(playGen);
@@ -239,6 +225,25 @@
 
   /* ---------- rendering ---------- */
 
+  /* subtle message sounds (WebAudio — no files, starts after first user gesture) */
+  var actx = null;
+  function blip(freq, gain) {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') { actx.resume(); }
+      var o = actx.createOscillator();
+      var v = actx.createGain();
+      o.type = 'sine';
+      o.frequency.value = freq;
+      v.gain.setValueAtTime(gain, actx.currentTime);
+      v.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.12);
+      o.connect(v);
+      v.connect(actx.destination);
+      o.start();
+      o.stop(actx.currentTime + 0.13);
+    } catch (e) { /* audio unavailable — silent */ }
+  }
+
   function addBubble(kind, text) {
     var m = $('messages');
     var el = document.createElement('div');
@@ -249,6 +254,35 @@
     t.className = 'msg-time t-' + kind;
     t.textContent = (kind === 'agent' ? 'Agent · ' : '') + now();
     m.appendChild(t);
+    m.scrollTop = m.scrollHeight;
+    blip(kind === 'agent' ? 880 : 520, kind === 'agent' ? 0.05 : 0.06);
+  }
+
+  /* boarding-pass cards — the customer's booking exactly as in the data pack */
+  function addTicketCards(customerId) {
+    var m = $('messages');
+    E.DATA.bookings.filter(function (b) { return b.customer === customerId; }).forEach(function (b) {
+      var cities = b.route.split('→').map(function (s) { return s.trim().toUpperCase(); });
+      var el = document.createElement('div');
+      el.className = 'ticket';
+      var stampCls = 'stamp-' + b.status;
+      var stampTxt = b.status === 'cancelled' ? 'Cancelled' : (b.status === 'delayed' ? 'Delayed ' + b.delayHours + 'h' : 'On schedule');
+      el.innerHTML =
+        '<div class="stub"><svg width="18" height="18" viewBox="0 0 26 26"><path d="M2 20 L13 4 L16 9 L24 20 L16 16 L10 20 Z" fill="#ffffff"/></svg><span class="air">SK AIRWAYS</span></div>' +
+        '<div class="tmain">' +
+          '<div class="trow1"><span class="route">' + esc(cities[0]) + '<span class="arr">→</span>' + esc(cities[1] || '') + '</span>' +
+          '<span class="fno">' + esc(b.flight) + '</span></div>' +
+          '<div class="tgrid">' +
+            '<div class="tf"><div class="k">Date</div><div class="v">' + esc(b.date) + '</div></div>' +
+            '<div class="tf"><div class="k">Scheduled</div><div class="v' + (b.newDep ? ' strike' : '') + '">' + esc(b.dep) + '</div></div>' +
+            (b.newDep ? '<div class="tf"><div class="k">New departure</div><div class="v">' + esc(b.newDep) + '</div></div>' : '') +
+            '<div class="tf"><div class="k">Status</div><div class="v">' + esc(b.statusText) + '</div></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="tside"><span class="stamp ' + stampCls + '">' + esc(stampTxt) + '</span>' +
+          '<span class="tpnr">PNR ' + esc(b.pnr) + '</span></div>';
+      m.appendChild(el);
+    });
     m.scrollTop = m.scrollHeight;
   }
 
@@ -355,7 +389,13 @@
         showTyping(false);
       }
     }
-    if (out.customer) updateWho(out.customer);
+    if (out.customer) {
+      updateWho(out.customer);
+      if (session && !session.ticketShown) {
+        addTicketCards(out.customer.id); // identity just verified — show the boarding pass
+        session.ticketShown = true;
+      }
+    }
     if ((out.actions && out.actions.length) || (out.escalations && out.escalations.length)) {
       addResolutionCard(out);
     }
@@ -468,9 +508,6 @@
     });
     $('restartBtn').addEventListener('click', function () {
       if (session) openSession(session.customerId, false);
-    });
-    $('replayBtn').addEventListener('click', function () {
-      if (session) openSession(session.customerId, true);
     });
     $('consoleToggle').addEventListener('click', function () {
       $('inspector').classList.toggle('open');

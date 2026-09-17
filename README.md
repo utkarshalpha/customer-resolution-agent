@@ -108,6 +108,18 @@ suggested replies, or **Watch scenario** to run the full §6 script end-to-end.
 The same policy checks driven by keyword intent matching (`engine.js`) — fully deterministic,
 runs in the browser or on the server with no key and no dependencies.
 
+### Assignment requirements → where they live
+
+| Requirement | Implementation |
+|---|---|
+| Understand the customer's intent | LLM conversation (AI mode) / intent matching (rules mode); multi-intent turns handled in one reply |
+| Ask only necessary questions | Identity-first flow: one question (the PNR); `verify_identity` returns profile + bookings, which are never re-asked |
+| Use the supplied data and policies | Data pack as seed data; `kb.js` serves verbatim §-cited rules; `policy.js` enforces §3/§4 in code the model can't bypass |
+| Recommend or execute the correct next action | Nine tools execute refunds, rebookings and compensation; the options offered are exactly what policy provides |
+| Handle an angry or confused customer | Empathy per the §5 tone samples; capability fallback for confusion; anger never changes entitlements |
+| Escalate when authority is missing | Prohibited-list + ₹1,500 waiver limit + legal threats → tickets; the console's Approve/Deny closes the loop |
+| **Preserve a clear conversation and action record** | **Persistent audit log** (`data/audit.jsonl`): every message, action, escalation and supervisor decision, appended as it happens. Survives restarts, full transcripts in the Resolution Console, one-click **Download record** (JSON) per case |
+
 ### The three scenarios (all §6 outcomes enforced)
 
 - **Priya Nair (Gold, SK4821X)** — SK-204 cancelled → her choice of free rebooking within 24h

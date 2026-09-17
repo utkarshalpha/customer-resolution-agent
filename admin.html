@@ -41,6 +41,12 @@
   .handled-tag { font-size: 10.5px; font-weight: 600; color: var(--good); }
   .empty { color: var(--muted); font-style: italic; font-size: 13.5px; padding: 30px 0; }
   .refresh-note { font-size: 11.5px; color: var(--muted); }
+  .trwrap { border: 1px solid var(--line-soft); border-radius: 8px; background: var(--panel); }
+  .trwrap summary { cursor: pointer; padding: 8px 12px; font-size: 12.5px; color: var(--link); font-weight: 600; }
+  .tline { display: flex; gap: 10px; padding: 6px 12px; font-size: 12.5px; border-top: 1px solid var(--line-soft); }
+  .tline .tw { flex: none; width: 78px; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding-top: 2px; }
+  .tline.t-customer .tw { color: var(--indigo, #001871); font-weight: 700; }
+  .tline.t-supervisor .tw { color: var(--warn); font-weight: 700; }
 </style>
 </head>
 <body>

@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Customer Resolution Agent — Project Deck</title>
+<meta name="hz:slide-selector" content=".slide">
+<style>
+  :root {
+    --indigo: #001871; --indigo-dark: #00125a; --link: #2447c5;
+    --bg: #f5f7fb; --surface: #ffffff; --panel: #f8fafe;
+    --ink: #1f2533; --muted: #5b6472; --line: #e1e6f0; --line-soft: #e7ecf7;
+    --good: #0e7c4a; --good-bg: #e4f4ec; --warn: #935f00; --warn-bg: #fbf0dc;
+    --bad: #c0362c; --bad-bg: #fbe9e7; --info: #2447c5; --info-bg: #e9effc;
+    --tint: #eef2fc;
+    --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #d8dde8; font-family: var(--sans); color: var(--ink); }
+  .slide {
+    width: 1280px; height: 720px; background: var(--surface);
+    position: relative; overflow: hidden; margin: 24px auto;
+    display: flex; flex-direction: column;
+  }
+  body.one .slide { display: none; margin: 0; }
+  body.one .slide.active { display: flex; }
+
+  /* ---- shared furniture ---- */
+  .shead { display: flex; align-items: baseline; gap: 14px; padding: 40px 56px 0; }
+  .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--link); }
+  .snum { margin-left: auto; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .stitle { font-size: 34px; font-weight: 650; letter-spacing: -.01em; padding: 6px 56px 0; }
+  .ssub { font-size: 16px; color: var(--muted); padding: 6px 56px 0; max-width: 1000px; }
+  .sbody { flex: 1; padding: 26px 56px 0; }
+  .sfoot {
+    display: flex; gap: 18px; align-items: center; padding: 0 56px 26px;
+    font-size: 12px; color: var(--muted); font-family: var(--mono);
+  }
+  .sfoot .dot { color: var(--line); }
+  .pill { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
+  .p-good { background: var(--good-bg); color: var(--good); }
+  .p-bad { background: var(--bad-bg); color: var(--bad); }
+  .p-warn { background: var(--warn-bg); color: var(--warn); }
+  .p-info { background: var(--info-bg); color: var(--info); }
+  .p-neutral { background: #eef0f4; color: var(--muted); }
+  .mono { font-family: var(--mono); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+  .panelcard { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 14px; }
+
+  /* ---- slide 1: title ---- */
+  .s1 { background: var(--indigo); color: #fff; justify-content: center; }
+  .s1 .wrap { padding: 0 96px; }
+  .s1 .logo { display: flex; align-items: center; gap: 14px; margin-bottom: 40px; }
+  .s1 .logomark { width: 46px; height: 46px; border-radius: 12px; background: #fff; display: grid; place-items: center; }
+  .s1 .brand { font-size: 20px; font-weight: 650; letter-spacing: .02em; }
+  .s1 .brand small { display: block; font-size: 12px; font-weight: 400; color: #9aa7cf; letter-spacing: .12em; text-transform: uppercase; margin-top: 2px; }
+  .s1 .tag { display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #e2b84d; margin-bottom: 18px; }
+  .s1 h1 { font-size: 62px; font-weight: 700; letter-spacing: -.015em; line-height: 1.05; max-width: 900px; }
+  .s1 .sub { font-size: 21px; color: #c3cdea; margin-top: 20px; max-width: 860px; line-height: 1.5; }
+  .s1 .meta { display: flex; gap: 26px; margin-top: 52px; font-size: 14.5px; color: #9aa7cf; font-family: var(--mono); flex-wrap: wrap; }
+  .s1 .chips { position: absolute; right: -30px; top: 70px; transform: rotate(8deg); opacity: .16; }
+  .s1 .chips div { font-family: var(--mono); font-size: 15px; border: 1.5px solid #fff; border-radius: 999px; padding: 8px 18px; margin: 12px 0; }
+
+  /* ---- slide 2: assignment ---- */
+  .cols { display: flex; gap: 28px; height: 100%; }
+  .brief { flex: 1.05; }
+  .brief p { font-size: 16.5px; line-height: 1.65; color: var(--ink); margin-bottom: 16px; max-width: 520px; }
+  .brief p b { color: var(--indigo); }
+  .constraints { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+  .constraint { display: flex; gap: 12px; align-items: center; font-size: 14.5px; }
+  .constraint .ic { width: 26px; height: 26px; border-radius: 8px; background: var(--tint); color: var(--indigo); display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
+  .pax { flex: 1; display: flex; flex-direction: column; gap: 14px; }
+  .paxcard { padding: 16px 20px; display: flex; align-items: center; gap: 16px; }
+  .paxcard .av { width: 44px; height: 44px; border-radius: 50%; background: var(--tint); color: var(--indigo); font-weight: 700; display: grid; place-items: center; font-size: 15px; flex: none; }
+  .paxcard .nm { font-weight: 650; font-size: 16px; }
+  .paxcard .sub { font-size: 13px; color: var(--muted); font-family: var(--mono); margin-top: 3px; }
+  .paxcard .pill { margin-left: auto; }
+
+  /* ---- slide 3: principle ---- */
+  .quad { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
+  .quad .card { padding: 22px; min-height: 190px; }
+  .quad .k { font-size: 30px; margin-bottom: 12px; }
+  .quad h3 { font-size: 18px; font-weight: 650; margin-bottom: 8px; color: var(--indigo); }
+  .quad p { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
+  .flows { display: flex; gap: 16px; margin-top: 24px; }
+  .flow { flex: 1; border-radius: 14px; padding: 18px 22px; font-family: var(--mono); font-size: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .flow.badf { background: var(--bad-bg); color: var(--bad); border: 1px solid #f2d2ce; }
+  .flow.goodf { background: var(--good-bg); color: var(--good); border: 1px solid #cfe8da; }
+  .flow .lbl { font-family: var(--sans); font-weight: 700; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; width: 100%; }
+  .arr { opacity: .55; }
+
+  /* ---- slide 4: architecture ---- */
+  .arch { display: flex; gap: 26px; }
+  .stack { flex: 1.35; display: flex; flex-direction: column; gap: 10px; }
+  .layer { display: flex; align-items: center; gap: 18px; border: 1px solid var(--line); border-left: 5px solid var(--indigo); border-radius: 12px; padding: 13px 20px; background: var(--surface); }
+  .layer .ln { font-family: var(--mono); font-size: 11.5px; color: var(--muted); width: 88px; flex: none; }
+  .layer b { font-size: 15.5px; }
+  .layer span.d { font-size: 13px; color: var(--muted); }
+  .archside { flex: 1; display: flex; flex-direction: column; gap: 14px; }
+  .archside .panelcard { padding: 18px 20px; }
+  .archside h4 { font-size: 14px; font-weight: 700; color: var(--indigo); margin-bottom: 8px; }
+  .archside p { font-size: 13px; color: var(--muted); line-height: 1.55; }
+  .chainrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .chainrow .pill { font-family: var(--mono); font-weight: 600; font-size: 11.5px; }
+
+  /* ---- slide 5: tools ---- */
+  .toolgrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; flex: 1.6; }
+  .tool { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); }
+  .tool .tn { font-family: var(--mono); font-size: 13.5px; font-weight: 700; color: var(--indigo); }
+  .tool p { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.45; }
+  .kbside { flex: 1; }
+  .kbcard { background: var(--indigo); color: #fff; border-radius: 14px; padding: 24px; height: 100%; display: flex; flex-direction: column; }
+  .kbcard h4 { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #e2b84d; margin-bottom: 14px; }
+  .kbquote { background: rgba(255,255,255,.08); border-left: 3px solid #e2b84d; border-radius: 8px; padding: 14px 16px; font-size: 13.5px; line-height: 1.6; color: #dbe2f5; }
+  .kbquote .sec { font-family: var(--mono); color: #e2b84d; font-size: 12px; }
+  .kbcard .note { font-size: 13px; color: #9aa7cf; margin-top: 16px; line-height: 1.55; }
+
+  /* ---- slide 6: transcript ---- */
+  .chatmock { flex: 1.25; display: flex; flex-direction: column; gap: 12px; }
+  .bub { max-width: 78%; border-radius: 14px; padding: 12px 16px; font-size: 14px; line-height: 1.5; }
+  .bub.agent { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .bub.user { align-self: flex-end; background: var(--indigo); color: #fff; border-bottom-right-radius: 4px; }
+  .steps { flex: 1; display: flex; flex-direction: column; gap: 0; }
+  .step { display: flex; gap: 16px; padding: 11px 0; }
+  .step .n { width: 30px; height: 30px; border-radius: 50%; background: var(--tint); color: var(--indigo); font-weight: 700; font-size: 13.5px; display: grid; place-items: center; flex: none; }
+  .step b { font-size: 14.5px; display: block; }
+  .step span { font-size: 12.5px; color: var(--muted); }
+
+  /* ---- slide 7: scenarios ---- */
+  .scen { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .scencard { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .scencard .hd { padding: 14px 18px; background: var(--panel); border-bottom: 1px solid var(--line-soft); }
+  .scencard .hd b { font-size: 16px; }
+  .scencard .hd .sub { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 3px; }
+  .orow { display: flex; gap: 10px; padding: 11px 18px; font-size: 13px; line-height: 1.45; border-bottom: 1px solid var(--line-soft); align-items: flex-start; }
+  .orow:last-child { border-bottom: none; }
+  .orow .m { font-weight: 800; flex: none; width: 16px; }
+  .m.ok { color: var(--good); } .m.no { color: var(--bad); } .m.up { color: var(--warn); }
+  .orow .rid { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  /* ---- slide 8: loop ---- */
+  .loop { display: flex; align-items: stretch; gap: 0; margin-top: 8px; }
+  .loopstep { flex: 1; border: 1px solid var(--line); border-radius: 14px; padding: 18px; background: var(--surface); position: relative; }
+  .loopstep h4 { font-size: 14.5px; font-weight: 700; color: var(--indigo); margin-bottom: 8px; }
+  .loopstep p { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .loopstep .chip { display: inline-block; margin-top: 10px; font-family: var(--mono); font-size: 11px; background: var(--tint); color: var(--indigo); border-radius: 6px; padding: 4px 8px; }
+  .looparr { align-self: center; padding: 0 10px; color: var(--link); font-size: 22px; flex: none; }
+  .loopnote { margin-top: 22px; display: flex; gap: 14px; }
+  .loopnote .panelcard { flex: 1; padding: 14px 18px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .loopnote b { color: var(--ink); }
+
+  /* ---- slide 9: stats ---- */
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .tile { border: 1px solid var(--line); border-radius: 14px; padding: 20px 18px; background: var(--surface); }
+  .tile .v { font-size: 42px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .tile .l { font-size: 12.5px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .relgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 26px; margin-top: 26px; }
+  .rel { display: flex; gap: 12px; font-size: 14px; line-height: 1.55; }
+  .rel .ic { color: var(--good); font-weight: 800; flex: none; }
+  .rel b { color: var(--indigo); }
+
+  /* ---- slide 10: try it ---- */
+  .try { display: flex; gap: 26px; }
+  .trymain { flex: 1.3; }
+  .linkrow { display: flex; gap: 14px; align-items: center; padding: 14px 18px; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; }
+  .linkrow .k { font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); width: 92px; flex: none; }
+  .linkrow .v { font-family: var(--mono); font-size: 14px; color: var(--link); font-weight: 600; }
+  .cmd { background: #10192b; color: #d7e0f4; font-family: var(--mono); font-size: 13.5px; border-radius: 12px; padding: 16px 20px; line-height: 1.9; margin-top: 6px; }
+  .cmd .c { color: #7d8db0; }
+  .road { flex: 1; }
+  .road .panelcard { padding: 18px 20px; margin-bottom: 12px; }
+  .road h4 { font-size: 14px; font-weight: 700; color: var(--indigo); margin-bottom: 6px; }
+  .road p { font-size: 13px; color: var(--muted); line-height: 1.55; }
+</style>
+</head>
+<body>
+
+<!-- ============ 1 · TITLE ============ -->
+<section class="slide s1">
+  <div class="chips" aria-hidden="true">
+    <div>CASE-20260923-0001</div>
+    <div>RFD-9001 · refund initiated</div>
+    <div>ESC-7001 · supervisor review</div>
+    <div>RBK-3301 · ₹2,000 waived</div>
+  </div>
+  <div class="wrap">
+    <div class="logo">
+      <span class="logomark">
+        <svg width="26" height="26" viewBox="0 0 26 26"><path d="M2 20 L13 4 L16 9 L24 20 L16 16 L10 20 Z" fill="#001871"/></svg>
+      </span>
+      <div class="brand">SK Airways<small>Customer support · demo tenant</small></div>
+    </div>
+    <div class="tag">AIONOS · Assignment 3</div>
+    <h1>Customer Resolution Agent</h1>
+    <p class="sub">An agentic customer-resolution platform for airline disruption — an LLM that reasons and converses, a deterministic policy engine it cannot bypass, and a human in the loop for everything beyond policy.</p>
+    <div class="meta">
+      <span>Utkarsh Tiwari</span>
+      <span>github.com/utkarshalpha/customer-resolution-agent</span>
+      <span>Exercise set: Wed 23 Sep 2026</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2 · ASSIGNMENT ============ -->
+<section class="slide">
+  <div class="shead"><span class="eyebrow">The brief</span><span class="snum">02 / 10</span></div>
+  <div class="stitle">One day of disruption, three passengers, zero invented facts</div>
+  <div class="sbody">
+    <div class="cols">
+      <div class="brief">
+        <p style="margin-bottom:12px">On <b>Wednesday, 23 September 2026</b>, a cancellation and two delays hit three customers at once — and the agent may use <b>only the supplied data pack</b>. The seven mandated behaviours, all shipped:</p>
+        <div class="constraints" style="gap:7px">
+          <div class="constraint"><span class="ic" style="background:var(--good-bg);color:var(--good)">✓</span>Understands intent — LLM reasoning over free text</div>
+          <div class="constraint"><span class="ic" style="background:var(--good-bg);color:var(--good)">✓</span>Asks only necessary questions — one PNR, never re-asks</div>
+          <div class="constraint"><span class="ic" style="background:var(--good-bg);color:var(--good)">✓</span>Uses the supplied data &amp; policies — KB with §-cited rules</div>
+          <div class="constraint"><span class="ic" style="background:var(--good-bg);color:var(--good)">✓</span>Recommends / executes the correct next action — 9 tools</div>
+          <div class="constraint"><span class="ic" style="background:var(--good-bg);color:var(--good)">✓</span>Handles angry &amp; confused customers — empathy, never over-promise</div>
+          <div class="constraint"><span class="ic" style="background:var(--good-bg);color:var(--good)">✓</span>Escalates when authority is missing — tickets → supervisor</div>
+          <div class="constraint"><span class="ic" style="background:var(--good-bg);color:var(--good)">✓</span>Preserves the conversation &amp; action record — persistent audit log</div>
+        </div>
+      </div>
+      <div class="pax">
+        <div class="card paxcard">
+          <span class="av">PN</span>
+          <div><div class="nm">Priya Nair · Gold</div><div class="sub">PNR SK4821X · SK-204 Delhi → Goa</div></div>
+          <span class="pill p-bad">Cancelled</span>
+        </div>
+        <div class="card paxcard">
+          <span class="av">AK</span>
+          <div><div class="nm">Arvind Kulkarni · Silver</div><div class="sub">PNR TR1190B · SK-118 Mumbai → Bengaluru</div></div>
+          <span class="pill p-warn">Delayed 4h</span>
+        </div>
+        <div class="card paxcard">
+          <span class="av">MK</span>
+          <div><div class="nm">Meher Kaur · Platinum</div><div class="sub">PNR WL7742 · SK-305 Delhi → Hyderabad</div></div>
+          <span class="pill p-warn">Delayed 6h</span>
+        </div>
+        <div class="card paxcard" style="border-style:dashed">
+          <span class="av">?</span>
+          <div><div class="nm">Each wants more than policy allows</div><div class="sub">upgrade · hotel &lt; 5h · full night · ₹2,000 waiver</div></div>
+          <span class="pill p-info">The real test</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sfoot"><span>Customer Resolution Agent</span><span class="dot">•</span><span>AIONOS Assignment 3</span></div>
+</section>
+
+<!-- ============ 3 · PRINCIPLE ============ -->
+<section class="slide">
+  <div class="shead"><span class="eyebrow">Design principle</span><span class="snum">03 / 10</span></div>
+  <div class="stitle">The LLM never decides who gets compensation</div>
+  <div class="sbody">
+    <div class="quad">
+      <div class="card"><div class="k">💬</div><h3>LLM</h3><p>Conversation and reasoning: understands intent, empathises, plans which tool to call — Claude or free providers, same contract.</p></div>
+      <div class="card"><div class="k">🔧</div><h3>Tools</h3><p>The only way facts are fetched and actions happen. Nine tools with strict schemas — no action exists outside them.</p></div>
+      <div class="card"><div class="k">§</div><h3>Policy engine</h3><p>Business rules as deterministic code. Every tool call is checked; disallowed calls return the rule, never execute.</p></div>
+      <div class="card"><div class="k">🧑‍⚖️</div><h3>Human</h3><p>The safety boundary. Beyond-policy asks, waivers over ₹1,500, and legal threats become tickets for a supervisor.</p></div>
+    </div>
+    <div class="flows">
+      <div class="flow badf"><span class="lbl">✕ &nbsp;An LLM wrapper</span>User <span class="arr">→</span> LLM <span class="arr">→</span> “Sure, here’s ₹2,000”</div>
+      <div class="flow goodf"><span class="lbl">✓ &nbsp;This platform</span>User <span class="arr">→</span> LLM <span class="arr">→</span> tool call <span class="arr">→</span> policy check <span class="arr">→</span> authorized action <span class="arr">→</span> audit</div>
+    </div>
+  </div>
+  <div class="sfoot"><span>Customer Resolution Agent</span><span class="dot">•</span><span>LLM reasons · tools act · policy enforces · humans decide</span></div>
+</section>
+
+<!-- ============ 4 · ARCHITECTURE ============ -->
+<section class="slide">
+  <div class="shead"><span class="eyebrow">Architecture</span><span class="snum">04 / 10</span></div>
+  <div class="stitle">Five layers, one deterministic core</div>
+  <div class="sbody">
+    <div class="arch">
+      <div class="stack">
+        <div class="layer"><span class="ln">index.html<br>app.js</span><div><b>Chat UI</b> — customer chat, suggested replies, auto-play, live policy-trace console, resolution cards</div></div>
+        <div class="layer"><span class="ln">server.js</span><div><b>API server</b> — sessions &amp; case store, provider resolution, supervisor notices <span class="d">(plain Node, zero deps)</span></div></div>
+        <div class="layer"><span class="ln">agent.js<br>agent-openai.js</span><div><b>Agent runtime</b> — tool-use loop for Claude and any OpenAI-compatible LLM, retries &amp; refusal handling</div></div>
+        <div class="layer" style="border-left-color:#c0362c"><span class="ln">policy.js</span><div><b>Policy layer</b> — 9 strict tools + rule checks the model cannot bypass; identity gating; audit trace</div></div>
+        <div class="layer"><span class="ln">kb.js<br>engine.js</span><div><b>Knowledge &amp; data</b> — the data pack verbatim: rule KB with §-ids, seed customers/bookings, rules fallback</div></div>
+      </div>
+      <div class="archside">
+        <div class="panelcard">
+          <h4>Resolution Console (/admin)</h4>
+          <p>Supervisor view of every case: audit ledger, open escalations, <b style="color:var(--ink)">Approve / Deny</b> — decisions flow back into the live chat.</p>
+        </div>
+        <div class="panelcard">
+          <h4>LLM provider chain</h4>
+          <p>First credential found wins; everything degrades gracefully:</p>
+          <div class="chainrow">
+            <span class="pill p-info">Claude</span><span class="arr">→</span>
+            <span class="pill p-info">Groq</span><span class="arr">→</span>
+            <span class="pill p-info">Gemini</span><span class="arr">→</span>
+            <span class="pill p-info">OpenRouter</span><span class="arr">→</span>
+            <span class="pill p-neutral">keyless free LLM</span><span class="arr">→</span>
+            <span class="pill p-neutral">rules engine</span>
+          </div>
+        </div>
+        <div class="panelcard">
+          <h4>Two runtimes, same code</h4>
+          <p>UMD modules run the identical policy layer on the Node server <b style="color:var(--ink)">and</b> in the browser — the static deploy still ships a working AI agent.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sfoot"><span>Customer Resolution Agent</span><span class="dot">•</span><span>Node 18+ · no framework · SDK optional</span></div>
+</section>
+
+<!-- ============ 5 · TOOLS + KB ============ -->
+<section class="slide">
+  <div class="shead"><span class="eyebrow">Capability surface</span><span class="snum">05 / 10</span></div>
+  <div class="stitle">Nine policy-enforced tools, one retrievable knowledge base</div>
+  <div class="sbody">
+    <div class="cols">
+      <div class="toolgrid">
+        <div class="tool"><div class="tn">verify_identity</div><p>Binds the session to a booking reference — nothing works before it</p></div>
+        <div class="tool"><div class="tn">search_policy</div><p>Verbatim rule text with §-ids from the KB</p></div>
+        <div class="tool"><div class="tn">get_booking_details</div><p>Re-fetch the verified customer’s flights</p></div>
+        <div class="tool"><div class="tn">issue_delay_compensation</div><p>Voucher / lounge / delayed-hours hotel by delay tier, idempotent</p></div>
+        <div class="tool"><div class="tn">rebook_free</div><p>Cancellations only — next flight ≤ 24h, tier priority</p></div>
+        <div class="tool"><div class="tn">initiate_refund</div><p>7 business days, original payment method only</p></div>
+        <div class="tool"><div class="tn">quote_fare_difference</div><p>The only source of fare figures the model may quote</p></div>
+        <div class="tool"><div class="tn">rebook_paid_alternative</div><p>Needs the quote + explicit acceptance, or a supervisor waiver</p></div>
+        <div class="tool"><div class="tn">escalate_to_human</div><p>Tickets for everything prohibited — immediate for legal threats</p></div>
+      </div>
+      <div class="kbside">
+        <div class="kbcard">
+          <h4>Knowledge base, not vibes</h4>
+          <div class="kbquote">
+            <span class="sec">§3 · Delay Compensation Rule</span><br>
+            “Delay more than 5 hours: meal voucher + hotel accommodation, covering only the delayed hours (not a full night’s stay).”
+          </div>
+          <p class="note">The agent cites rules it retrieved, exactly as written. A disallowed tool call returns the rule that blocked it — the model must relay it and escalate, because paraphrasing policy into existence isn’t possible.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sfoot"><span>Customer Resolution Agent</span><span class="dot">•</span><span>strict JSON schemas · every call audited</span></div>
+</section>
+
+<!-- ============ 6 · AGENTIC FLOW ============ -->
+<section class="slide">
+  <div class="shead"><span class="eyebrow">Agentic behaviour</span><span class="snum">06 / 10</span></div>
+  <div class="stitle">Identity first — ask only for what’s missing</div>
+  <div class="sbody">
+    <div class="cols">
+      <div class="chatmock">
+        <div class="bub user">Hi, my flight today got cancelled and nobody told me anything!</div>
+        <div class="bub agent">I’m really sorry — let’s get this sorted right away. Could you share your booking reference (PNR) so I can pull up your details?</div>
+        <div class="bub user">it is SK4821X</div>
+        <div class="bub agent">Hi Priya, I’m really sorry about the cancellation of your Delhi → Goa flight (SK-204) today. I can rebook you on the next available flight within 24 hours at no extra cost, or process a full refund to the original payment method. Which would you prefer?</div>
+        <div style="align-self:flex-start"><span class="pill p-good">Real transcript — free keyless LLM, no API key</span></div>
+      </div>
+      <div class="steps">
+        <div class="step"><span class="n">1</span><div><b>Session starts unverified</b><span>No customer data exists in the model’s context</span></div></div>
+        <div class="step"><span class="n">2</span><div><b>Understand, then ask for the PNR</b><span>One question — not a form of fifteen</span></div></div>
+        <div class="step"><span class="n">3</span><div><b>verify_identity binds the profile</b><span>Tier, contact, bookings return from the data layer</span></div></div>
+        <div class="step"><span class="n">4</span><div><b>Never re-ask what’s known</b><span>Flight, status and entitlements come from the record</span></div></div>
+        <div class="step"><span class="n">5</span><div><b>Resolve strictly per the rules</b><span>Options offered are exactly what policy provides</span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="sfoot"><span>Customer Resolution Agent</span><span class="dot">•</span><span>privacy: other passengers’ data is never in context</span></div>
+</section>
+
+<!-- ============ 7 · SCENARIOS ============ -->
+<section class="slide">
+  <div class="shead"><span class="eyebrow">Guardrails under fire</span><span class="snum">07 / 10</span></div>
+  <div class="stitle">All three scenarios — resolved, refused, escalated</div>
+  <div class="sbody">
+    <div class="scen">
+      <div class="scencard">
+        <div class="hd"><b>Priya Nair</b><div class="sub">Gold · SK-204 cancelled</div></div>
+        <div class="orow"><span class="m ok">✓</span><div>Choice offered: free rebooking ≤ 24h (Gold priority) or full refund</div></div>
+        <div class="orow"><span class="m ok">✓</span><div>Refund initiated — 7 business days, original method only <span class="rid">RFD-9001</span></div></div>
+        <div class="orow"><span class="m up">⤴</span><div>“Free business-class upgrade for the trouble” → escalated, never approved <span class="rid">ESC-7001</span></div></div>
+        <div class="orow"><span class="m up">⤴</span><div>Legal threat → immediate specialist handover, Sample-C tone</div></div>
+      </div>
+      <div class="scencard">
+        <div class="hd"><b>Arvind Kulkarni</b><div class="sub">Silver · SK-118 delayed 4h</div></div>
+        <div class="orow"><span class="m ok">✓</span><div>Meal voucher + lounge access applied (&gt; 3h tier) <span class="rid">VCH-2301 · LNG-1101</span></div></div>
+        <div class="orow"><span class="m no">✕</span><div>Hotel refused — the rule needs a delay over 5 hours, his is 4</div></div>
+        <div class="orow"><span class="m up">⤴</span><div>“Make an exception, just this once” → ticket to a human, no exception made</div></div>
+        <div class="orow"><span class="m no">✕</span><div>Refund refused — refunds are for cancellations, not delays</div></div>
+      </div>
+      <div class="scencard">
+        <div class="hd"><b>Meher Kaur</b><div class="sub">Platinum · SK-305 delayed 6h</div></div>
+        <div class="orow"><span class="m ok">✓</span><div>Voucher + lounge + hotel for the delayed hours only (14:00–20:00)</div></div>
+        <div class="orow"><span class="m no">✕</span><div>Full night’s stay refused — policy covers delayed hours, explicitly</div></div>
+        <div class="orow"><span class="m up">⤴</span><div>₹2,000 fare difference &gt; ₹1,500 agent limit → supervisor review</div></div>
+        <div class="orow"><span class="m ok">✓</span><div>Pays instead? Moved with Platinum priority, difference collected</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="sfoot"><span>Customer Resolution Agent</span><span class="dot">•</span><span>every outcome verified live against the free LLM and in 93 offline checks</span></div>
+</section>
+
+<!-- ============ 8 · CLOSED LOOP ============ -->
+<section class="slide">
+  <div class="shead"><span class="eyebrow">Human-in-the-loop</span><span class="snum">08 / 10</span></div>
+  <div class="stitle">Escalations come back — the loop is closed</div>
+  <div class="sbody">
+    <div class="loop">
+      <div class="loopstep"><h4>1 · Chat escalates</h4><p>Meher won’t pay the ₹2,000 difference. The agent can’t waive above ₹1,500, so it raises a ticket.</p><span class="chip">ESC-7001 · fare waiver</span></div>
+      <span class="looparr">→</span>
+      <div class="loopstep"><h4>2 · Console decides</h4><p>The supervisor sees the case, ledger and ticket in the Resolution Console and clicks <b>Approve</b> (or Deny).</p><span class="chip">/admin · Approve / Deny</span></div>
+      <span class="looparr">→</span>
+      <div class="loopstep"><h4>3 · Policy executes</h4><p>Approval sets the waiver flag; the rebooking runs through the same policy layer — not around it.</p><span class="chip">RBK-3301 · ₹2,000 WAIVED</span></div>
+      <span class="looparr">→</span>
+      <div class="loopstep"><h4>4 · Customer sees it</h4><p>Her live chat updates within seconds: moved to the alternative flight at no charge, Platinum priority.</p><span class="chip">notice ≤ 4s · no refresh</span></div>
+    </div>
+    <div class="loopnote">
+      <div class="panelcard"><b>Denied instead?</b> The customer is told the difference remains payable, with the in-policy options restated.</div>
+      <div class="panelcard"><b>Already paid meanwhile?</b> The notice promises the ₹2,000 back — to the original payment method, per the refund rule.</div>
+      <div class="panelcard"><b>AI stays consistent:</b> the decision is appended to the model’s history, so the next turn knows what the supervisor did.</div>
+    </div>
+  </div>
+  <div class="sfoot"><span>Customer Resolution Agent</span><span class="dot">•</span><span>agent autonomy with controlled boundaries</span></div>
+</section>
+
+<!-- ============ 9 · ENGINEERING ============ -->
+<section class="slide">
+  <div class="shead"><span class="eyebrow">Engineering &amp; reliability</span><span class="snum">09 / 10</span></div>
+  <div class="stitle">Built to be trusted, not just demoed</div>
+  <div class="sbody">
+    <div class="tiles">
+      <div class="tile"><div class="v">93</div><div class="l">automated checks — scenarios, guardrails, policy layer</div></div>
+      <div class="tile"><div class="v">9</div><div class="l">strict-schema tools; zero actions outside them</div></div>
+      <div class="tile"><div class="v">6</div><div class="l">LLM providers + a deterministic rules fallback</div></div>
+      <div class="tile"><div class="v">2</div><div class="l">runtimes — Node server and fully in-browser</div></div>
+      <div class="tile"><div class="v">0</div><div class="l">required dependencies or API keys to run</div></div>
+    </div>
+    <div class="relgrid">
+      <div class="rel"><span class="ic">✓</span><div><b>Persistent record</b> — every message, action and decision appended to an audit log; survives restarts; full transcripts and downloadable case records in the console</div></div>
+      <div class="rel"><span class="ic">✓</span><div><b>Free-tier resilience</b> — retries with backoff, 8-second probes, graceful degradation at every layer</div></div>
+      <div class="rel"><span class="ic">✓</span><div><b>Model discipline</b> — server-side legal-threat guard, refusal handling, prompt caching on the Claude path</div></div>
+      <div class="rel"><span class="ic">✓</span><div><b>Privacy by construction</b> — only the verified customer’s data ever enters the model’s context</div></div>
+    </div>
+  </div>
+  <div class="sfoot"><span>Customer Resolution Agent</span><span class="dot">•</span><span>npm test · node test.js + node test-tools.js</span></div>
+</section>
+
+<!-- ============ 10 · TRY IT ============ -->
+<section class="slide">
+  <div class="shead"><span class="eyebrow">Try it &amp; what’s next</span><span class="snum">10 / 10</span></div>
+  <div class="stitle">Open it, break it, escalate it</div>
+  <div class="sbody">
+    <div class="try">
+      <div class="trymain">
+        <div class="linkrow"><span class="k">Repo</span><span class="v">github.com/utkarshalpha/customer-resolution-agent</span></div>
+        <div class="linkrow"><span class="k">Preview</span><span class="v">utkarshalpha.github.io/customer-resolution-agent</span></div>
+        <div class="linkrow"><span class="k">Deploy</span><span class="v">Render free — one-click blueprint (persistent Node)</span></div>
+        <div class="cmd">
+          <span class="c"># full functionality — chat + /admin console</span><br>
+          node server.js<br>
+          <span class="c"># optional: faster free provider</span><br>
+          GROQ_API_KEY=… node server.js<br>
+          <span class="c"># 91 checks, no key needed</span><br>
+          npm test
+        </div>
+      </div>
+      <div class="road">
+        <div class="panelcard"><h4>Why Render, not Pages/Vercel</h4><p>Sessions, notices and the console live in one stateful Node process — static hosting has no server, and serverless loses in-memory state between requests.</p></div>
+        <div class="panelcard"><h4>Roadmap · platform, not chatbot</h4><p>Second tenant (hotel / e-commerce) on the same policy core · automated eval harness scoring scenario outcomes · adapter layer for CRM &amp; ticketing systems.</p></div>
+        <div class="panelcard" style="background:var(--indigo);border-color:var(--indigo)"><h4 style="color:#e2b84d">Thank you</h4><p style="color:#c3cdea">Utkarsh Tiwari · AIONOS Assignment 3 · Customer-Facing Resolution Agent</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="sfoot"><span>Customer Resolution Agent</span><span class="dot">•</span><span>fictional airline &amp; data — everything from the assignment pack</span></div>
+</section>
+
+<script>
+  // ?s=N renders exactly one slide full-bleed (used for PNG/PPTX derivation)
+  var n = new URLSearchParams(location.search).get('s');
+  if (n) {
+    document.body.classList.add('one');
+    var slides = document.querySelectorAll('.slide');
+    var i = Math.min(Math.max(parseInt(n, 10) || 1, 1), slides.length) - 1;
+    slides[i].classList.add('active');
+  }
+</script>
+</body>
+</html>

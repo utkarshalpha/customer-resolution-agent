@@ -46,9 +46,11 @@
             if (t.handled) {
               var tag = t.decision ? t.decision.toUpperCase() : 'HANDLED';
               tail = '<span class="handled-tag"' + (t.decision === 'denied' ? ' style="color:var(--bad)"' : '') + '>' + esc(tag) + '</span>';
-            } else {
+            } else if (c.live) {
               tail = '<button class="btn btn-sm btn-primary" data-case="' + esc(c.caseId) + '" data-ticket="' + esc(t.id) + '" data-decision="approved">Approve</button>' +
                      '<button class="btn btn-sm" data-case="' + esc(c.caseId) + '" data-ticket="' + esc(t.id) + '" data-decision="denied">Deny</button>';
+            } else {
+              tail = '<span class="handled-tag" style="color:var(--warn)">OPEN · SESSION ENDED</span>';
             }
             return '<div class="ticket' + (t.handled ? ' handled' : '') + '">' +
               '<span class="id">' + esc(t.id) + '</span>' +
@@ -56,6 +58,13 @@
               '</div>';
           }).join('')
         : '<p class="empty" style="padding:4px 0">None</p>';
+      var transcript = (c.transcript && c.transcript.length)
+        ? '<details class="trwrap"><summary>' + c.transcript.length + ' messages — view transcript</summary>' +
+            c.transcript.map(function (m) {
+              return '<div class="tline t-' + esc(m.who) + '"><span class="tw">' + esc(m.who) + '</span><span>' + esc(m.text) + '</span></div>';
+            }).join('') +
+          '</details>'
+        : '<p class="empty" style="padding:4px 0">None recorded</p>';
       var acts = c.actions.length
         ? c.actions.map(function (a) {
             return '<div class="actionrow"><span class="id">' + esc(a.id) + '</span><span class="grow">' + esc(a.label) + '</span></div>';
@@ -67,9 +76,12 @@
           '<span class="case-meta">' + who + '</span>' +
           '<span class="case-meta">' + esc(c.mode === 'ai' ? 'AI agent' : 'Rules engine') + (c.provider ? ' · ' + esc(c.provider) : '') + '</span>' +
           (c.fullEscalated ? '<span class="pill pill-cancelled">Specialist team</span>' : '') +
+          (c.live ? '' : '<span class="pill" style="background:#eef0f4;color:var(--muted)">Ended · from audit log</span>') +
+          '<a class="btn btn-sm" style="margin-left:auto;text-decoration:none" href="/api/record?caseId=' + encodeURIComponent(c.caseId) + '">Download record</a>' +
         '</div>' +
         '<div class="case-section">Escalation tickets</div>' + tickets +
         '<div class="case-section">Actions on booking</div>' + acts +
+        '<div class="case-section">Conversation record</div>' + transcript +
         '</article>';
     }).join('');
 

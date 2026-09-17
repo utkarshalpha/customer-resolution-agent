@@ -98,10 +98,57 @@ async function resolveRuntime() {
   useRules('no LLM credentials and the keyless endpoint is unreachable');
 }
 
+/* ---------- persistent audit log (the non-negotiable record) ----------
+   Every message, action, escalation and supervisor decision is appended to
+   data/audit.jsonl as it happens. On boot the log is replayed, so completed
+   cases — transcript included — survive restarts and stay visible in the
+   Resolution Console and via GET /api/record. */
+
+const DATA_DIR = path.join(__dirname, 'data');
+const AUDIT_FILE = path.join(DATA_DIR, 'audit.jsonl');
+try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) { /* exists */ }
+
+function writeAudit(event) {
+  try {
+    fs.appendFileSync(AUDIT_FILE, JSON.stringify(Object.assign({ at: new Date().toISOString() }, event)) + '\n');
+  } catch (e) { console.error('[audit write failed]', e.message); }
+}
+
+let caseCounter = 0;
+const historicalCases = new Map(); // caseId -> case record rebuilt from the audit log
+(function loadAudit() {
+  let raw;
+  try { raw = fs.readFileSync(AUDIT_FILE, 'utf8'); } catch (_) { return; }
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    let ev;
+    try { ev = JSON.parse(line); } catch (_) { continue; }
+    if (!ev.caseId) continue;
+    let c = historicalCases.get(ev.caseId);
+    if (!c) {
+      c = { caseId: ev.caseId, createdAt: ev.at, mode: null, provider: null, customer: null, transcript: [], actions: [], tickets: [], fullEscalated: false, live: false };
+      historicalCases.set(ev.caseId, c);
+    }
+    if (ev.event === 'session_opened') { c.mode = ev.mode; c.provider = ev.provider; c.createdAt = ev.at; }
+    if (ev.event === 'identity_verified') c.customer = ev.customer;
+    if (ev.event === 'customer_message') c.transcript.push({ who: 'customer', text: ev.text, at: ev.at });
+    if (ev.event === 'agent_message') c.transcript.push({ who: ev.via === 'supervisor' ? 'supervisor' : 'agent', text: ev.text, at: ev.at });
+    if (ev.event === 'action') c.actions.push({ id: ev.id, label: ev.label });
+    if (ev.event === 'escalation') { c.tickets.push({ id: ev.id, label: ev.label, handled: false }); if (ev.full) c.fullEscalated = true; }
+    if (ev.event === 'supervisor_decision') {
+      const t = c.tickets.find(x => x.id === ev.ticketId);
+      if (t) { t.handled = true; t.decision = ev.decision; }
+    }
+  }
+  for (const id of historicalCases.keys()) {
+    const n = parseInt(id.split('-').pop(), 10);
+    if (n > caseCounter) caseCounter = n; // restarts never reuse a case id
+  }
+})();
+
 /* ---------- sessions & cases ---------- */
 
-const sessions = new Map(); // id -> { caseId, mode, provider, providerObj, state, actions[], tickets[], createdAt, forceEscalated }
-let caseCounter = 0;
+const sessions = new Map(); // id -> { caseId, mode, provider, providerObj, state, actions[], tickets[], notices[], transcript[], createdAt, forceEscalated }
 function newCaseId() {
   return 'CASE-20260923-' + String(++caseCounter).padStart(4, '0');
 }
@@ -125,8 +172,24 @@ function customerOf(entry) {
 }
 
 function recordLedger(entry, out) {
-  (out.actions || []).forEach(a => entry.actions.push({ id: a.id, label: a.label }));
-  (out.escalations || []).forEach(t => entry.tickets.push({ id: t.id, label: t.label, handled: false }));
+  (out.actions || []).forEach(a => {
+    entry.actions.push({ id: a.id, label: a.label });
+    writeAudit({ caseId: entry.caseId, event: 'action', id: a.id, label: a.label });
+  });
+  (out.escalations || []).forEach(t => {
+    entry.tickets.push({ id: t.id, label: t.label, handled: false });
+    writeAudit({ caseId: entry.caseId, event: 'escalation', id: t.id, label: t.label, full: Boolean((entry.state && entry.state.fullEscalated) || entry.forceEscalated) });
+  });
+}
+
+function recordTranscript(entry, who, text) {
+  entry.transcript.push({ who, text, at: new Date().toISOString() });
+  writeAudit({
+    caseId: entry.caseId,
+    event: who === 'customer' ? 'customer_message' : 'agent_message',
+    via: who === 'supervisor' ? 'supervisor' : undefined,
+    text
+  });
 }
 
 function findPnrInText(text) {
@@ -207,6 +270,8 @@ function buildDecisionNotice(entry, ticket, decision) {
   }
 
   recordLedger(entry, out);
+  writeAudit({ caseId: entry.caseId, event: 'supervisor_decision', ticketId: ticket.id, decision });
+  out.parts.forEach(p => recordTranscript(entry, 'supervisor', p));
   if (entry.mode === 'ai' && state) {
     // keep the model's history consistent with what the customer was shown
     state.messages.push({ role: 'assistant', content: out.parts.join('\n\n') });
@@ -281,9 +346,13 @@ const server = http.createServer(async (req, res) => {
       }
       const entry = {
         caseId, mode: RUNTIME.mode, provider: RUNTIME.provider, providerObj: RUNTIME.providerObj,
-        state, actions: [], tickets: [], notices: [], createdAt: new Date().toISOString(), forceEscalated: false
+        state, actions: [], tickets: [], notices: [], transcript: [], createdAt: new Date().toISOString(), forceEscalated: false
       };
       sessions.set(id, entry);
+      writeAudit({ caseId, event: 'session_opened', mode: RUNTIME.mode, provider: RUNTIME.provider });
+      const c0 = customerOf(entry);
+      if (c0) writeAudit({ caseId, event: 'identity_verified', customer: c0 });
+      opening.parts.forEach(p => recordTranscript(entry, 'agent', p));
       return json(res, 200, {
         sessionId: id,
         caseId,
@@ -306,6 +375,8 @@ const server = http.createServer(async (req, res) => {
       if (!entry) return json(res, 404, { error: 'unknown session — restart the chat' });
       const text = String(body.text || '').slice(0, 2000).trim();
       if (!text) return json(res, 400, { error: 'empty message' });
+      const prevCust = customerOf(entry);
+      recordTranscript(entry, 'customer', text);
 
       let out;
       if (entry.mode === 'ai') {
@@ -326,6 +397,9 @@ const server = http.createServer(async (req, res) => {
         out = Engine.handleMessage(entry.state, text);
       }
       recordLedger(entry, out);
+      (out.parts || []).forEach(p => recordTranscript(entry, 'agent', p));
+      const nowCust = customerOf(entry);
+      if (!prevCust && nowCust) writeAudit({ caseId: entry.caseId, event: 'identity_verified', customer: nowCust });
       return json(res, 200, {
         mode: entry.mode,
         caseId: entry.caseId,
@@ -341,20 +415,49 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/api/cases') {
       const cases = [];
+      const liveIds = new Set();
       for (const entry of sessions.values()) {
+        liveIds.add(entry.caseId);
         cases.push({
           caseId: entry.caseId,
           mode: entry.mode,
           provider: entry.provider,
           customer: customerOf(entry),
           createdAt: entry.createdAt,
+          transcript: entry.transcript,
           actions: entry.actions,
           tickets: entry.tickets,
-          fullEscalated: Boolean((entry.state && entry.state.fullEscalated) || entry.forceEscalated)
+          fullEscalated: Boolean((entry.state && entry.state.fullEscalated) || entry.forceEscalated),
+          live: true
         });
+      }
+      for (const c of historicalCases.values()) {
+        if (!liveIds.has(c.caseId)) cases.push(c);
       }
       cases.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
       return json(res, 200, { cases });
+    }
+
+    /* Full case record — transcript + actions + tickets, downloadable. */
+    if (req.method === 'GET' && url.pathname === '/api/record') {
+      const caseId = String(url.searchParams.get('caseId') || '');
+      let rec = null;
+      for (const entry of sessions.values()) {
+        if (entry.caseId !== caseId) continue;
+        rec = {
+          caseId, createdAt: entry.createdAt, mode: entry.mode, provider: entry.provider,
+          customer: customerOf(entry), transcript: entry.transcript,
+          actions: entry.actions, tickets: entry.tickets,
+          fullEscalated: Boolean((entry.state && entry.state.fullEscalated) || entry.forceEscalated), live: true
+        };
+      }
+      if (!rec) rec = historicalCases.get(caseId) || null;
+      if (!rec) return json(res, 404, { error: 'unknown case' });
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="' + caseId + '.json"'
+      });
+      return res.end(JSON.stringify(rec, null, 2));
     }
 
     /* Supervisor decision from the console — flows back into the customer chat. */
