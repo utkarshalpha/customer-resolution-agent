@@ -7,8 +7,9 @@
    ============================================================ */
 'use strict';
 
-const Engine = require('./engine.js');
-const KB = require('./kb.js');
+/* Runs in Node (server) and the browser (static/GitHub Pages deployments). */
+const Engine = (typeof module !== 'undefined' && module.exports) ? require('./engine.js') : window.Engine;
+const KB = (typeof module !== 'undefined' && module.exports) ? require('./kb.js') : window.KB;
 const DATA = Engine.DATA;
 
 const LEGAL_RE = /\b(legal action|legal|sue|suing|lawsuit|lawyer|court|formal complaint|consumer forum)\b/i;
@@ -509,4 +510,6 @@ function openingTurn(state) {
   return out;
 }
 
-module.exports = { createAiSession, buildSystemPrompt, TOOLS, executeTool, openingTurn, LEGAL_RE, trace };
+const POLICY_EXPORTS = { createAiSession, buildSystemPrompt, TOOLS, executeTool, openingTurn, LEGAL_RE, trace };
+if (typeof module !== 'undefined' && module.exports) module.exports = POLICY_EXPORTS;
+if (typeof window !== 'undefined') window.Policy = POLICY_EXPORTS;

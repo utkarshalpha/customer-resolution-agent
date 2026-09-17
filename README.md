@@ -4,6 +4,12 @@ Assignment 3 (AIONOS) — a customer-facing resolution agent for a day of airlin
 set on **Wednesday, 23 September 2026**, grounded **only** in the assignment data pack.
 No invented rules, policies or customer data.
 
+**Live demo:** https://utkarshalpha.github.io/customer-resolution-agent/
+(static build — the AI agent runs *in the browser* against a keyless free LLM; if that
+endpoint is momentarily unreachable it degrades to the deterministic rules engine, so the
+demo always works. The badge in the chat header shows which is active. Run locally with
+`node server.js` for the full experience including the support console.)
+
 ## Run it
 
 ```

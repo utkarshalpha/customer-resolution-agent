@@ -82,4 +82,6 @@ function searchPolicy(query, limit) {
   }));
 }
 
-module.exports = { CHUNKS, searchPolicy };
+const KB_EXPORTS = { CHUNKS, searchPolicy };
+if (typeof module !== 'undefined' && module.exports) module.exports = KB_EXPORTS;
+if (typeof window !== 'undefined') window.KB = KB_EXPORTS;

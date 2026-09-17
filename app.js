@@ -38,16 +38,24 @@
 
   /* ---------- transport ---------- */
 
+  var clientAI = null; // static hosting (e.g. GitHub Pages): keyless LLM called from the browser
+
   async function detectServer() {
     try {
-      var r = await fetch('/api/health');
+      var r = await fetch('api/health');
       if (!r.ok) throw new Error('bad status');
       var h = await r.json();
       serverMode = h.mode;
       serverInfo = h;
     } catch (e) {
-      serverMode = null; // file:// or server down → in-browser engine
+      serverMode = null; // file:// / static hosting / server down
       serverInfo = null;
+      if (window.AgentFree && window.Policy) {
+        try {
+          var prov = window.AgentFree.resolveProvider('pollinations');
+          if (prov && await window.AgentFree.probe('pollinations')) clientAI = prov;
+        } catch (err) { clientAI = null; }
+      }
     }
   }
 
@@ -79,7 +87,21 @@
       return { text: 'AI agent · ' + who, cls: 'mode mode-ai' };
     }
     if (serverMode === 'rules') return { text: 'Rules engine', cls: 'mode mode-rules' };
+    if (clientAI) return { text: 'AI agent · Free LLM (in-browser)', cls: 'mode mode-ai' };
     return { text: 'Local demo', cls: 'mode mode-rules' };
+  }
+
+  function clientChips(state) {
+    if (!state || !state.customer) {
+      return ['My booking reference is SK4821X', 'My booking reference is TR1190B', 'My booking reference is WL7742'];
+    }
+    if (state.fullEscalated) return ['What is the status of my booking?'];
+    var script = E.SCRIPTS[state.customer.id] || [];
+    var idx = Math.min(state.turn, script.length);
+    var chips = script.slice(idx, idx + 2);
+    if (!chips.length) chips = ['What is the status of my booking?', 'This is unacceptable — I’m considering legal action.'];
+    if (chips.length < 3) chips.push('What is the status of my booking?');
+    return chips.slice(0, 3);
   }
 
   /* ---------- landing ---------- */
@@ -186,15 +208,22 @@
       }
     }
     if (!serverMode) {
-      if (id === 'new') {
+      if (clientAI) {
+        var st = window.Policy.createAiSession(id === 'new' ? null : id, 'CASE-20260923-DEMO');
+        session = { kind: 'client', state: st, caseId: st.caseId, customerId: id };
+        $('who-case').textContent = st.caseId;
+        opening = window.Policy.openingTurn(st);
+        opening.chips = clientChips(st);
+      } else if (id === 'new') {
         session = null;
         showTyping(false);
-        addBubble('agent', 'The new-customer flow needs the server — run `node server.js` and open http://localhost:3000. The three passenger chats still work here.');
+        addBubble('agent', 'The new-customer flow needs the AI agent — run `node server.js` locally, or retry once you’re online (the free in-browser LLM could not be reached). The three passenger chats still work here.');
         setBusy(false);
         return;
+      } else {
+        session = { kind: 'local', state: E.createSession(id), customerId: id };
+        opening = E.openingMessage(session.state);
       }
-      session = { kind: 'local', state: E.createSession(id), customerId: id };
-      opening = E.openingMessage(session.state);
     }
 
     await renderAgentTurn(opening, 'Session opened', 300);
@@ -342,6 +371,13 @@
       session.turn++;
       return apiSend(text);
     }
+    if (session.kind === 'client') {
+      var out = await window.AgentFree.runTurn(session.state, text, clientAI);
+      var c = session.state.customer;
+      out.customer = c ? { id: c.id, name: c.name, tier: c.tier, pnr: c.pnr } : null;
+      out.chips = clientChips(session.state);
+      return out;
+    }
     return E.handleMessage(session.state, text);
   }
 
@@ -399,6 +435,10 @@
   document.addEventListener('DOMContentLoaded', async function () {
     buildLanding();
     await detectServer();
+    if (!serverMode) {
+      var al = $('adminLink');
+      if (al) al.style.display = 'none'; // the support console needs the server's /api
+    }
 
     // deep link: ?p=priya|arvind|meher & play=1 opens a session directly
     var qs = new URLSearchParams(location.search);

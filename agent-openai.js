@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    SK Airways — Customer Resolution Agent · free-LLM runner
    Drives the conversation with any OpenAI-compatible chat API.
    Zero dependencies (Node 18+ built-in fetch). Every action still
@@ -13,7 +13,10 @@
    ============================================================ */
 'use strict';
 
-const policy = require('./policy.js');
+/* Runs in Node (server) and the browser (static/GitHub Pages deployments,
+   where the keyless provider is called directly from the page). */
+const policy = (typeof module !== 'undefined' && module.exports) ? require('./policy.js') : window.Policy;
+const ENV = (typeof process !== 'undefined' && process.env) ? process.env : {};
 
 const PRESETS = {
   groq: {
@@ -53,17 +56,17 @@ function resolveProvider(name) {
   if (!preset) return null;
   const p = { name, label: preset.label, url: preset.url, model: preset.model, key: null };
   if (name === 'custom') {
-    const base = process.env.LLM_BASE_URL;
+    const base = ENV.LLM_BASE_URL;
     if (!base) return null;
     p.url = base.replace(/\/+$/, '') + '/chat/completions';
-    p.model = process.env.LLM_MODEL || 'gpt-4o-mini';
+    p.model = ENV.LLM_MODEL || 'gpt-4o-mini';
     p.label = 'Custom · ' + p.model;
   }
   if (preset.keyEnv) {
-    p.key = process.env[preset.keyEnv] || null;
+    p.key = ENV[preset.keyEnv] || null;
     if (!p.key && name !== 'pollinations') return null;
   }
-  if (process.env.LLM_MODEL && name !== 'custom') p.model = process.env.LLM_MODEL;
+  if (ENV.LLM_MODEL && name !== 'custom') p.model = ENV.LLM_MODEL;
   return p;
 }
 
@@ -194,4 +197,6 @@ async function runTurn(state, userText, provider) {
   return out;
 }
 
-module.exports = { runTurn, resolveProvider, probe, PRESETS };
+const AGENT_FREE_EXPORTS = { runTurn, resolveProvider, probe, PRESETS };
+if (typeof module !== 'undefined' && module.exports) module.exports = AGENT_FREE_EXPORTS;
+if (typeof window !== 'undefined') window.AgentFree = AGENT_FREE_EXPORTS;
