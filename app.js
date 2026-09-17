@@ -659,11 +659,9 @@
         if (ev.target === $(overlayId)) $(overlayId).classList.remove('show');
       });
     }
-    bindModal('dataBtn', 'dataOverlay', 'dataClose');
     bindModal('howBtn', 'howOverlay', 'howClose');
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape') {
-        $('dataOverlay').classList.remove('show');
         $('howOverlay').classList.remove('show');
         setVoice(false);
       }

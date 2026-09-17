@@ -21,7 +21,6 @@
   </div>
   <div class="appbar-spacer"></div>
   <span class="datechip">Wed 23 Sep 2026</span>
-  <button class="linkbtn" id="dataBtn" type="button">Data pack</button>
   <button class="linkbtn" id="howBtn" type="button">How it works</button>
   <button class="linkbtn" id="logoutBtn" type="button" hidden>Sign out</button>
 </header>
@@ -41,7 +40,7 @@
       <input id="loginInput" type="text" autocomplete="off" placeholder="Your name or booking reference (PNR)" aria-label="Name or booking reference">
       <div class="loginlist" id="loginList"></div>
     </div>
-    <p class="loginfoot">Demo accounts — start typing and pick a passenger from the data pack.</p>
+    <p class="loginfoot">Demo — start typing and pick a passenger.</p>
   </div>
 </main>
 
@@ -164,48 +163,6 @@
   </div>
   <div class="voicetext" id="voiceText">Voice mode is on — Aria will speak her replies out loud while everything still appears in the chat and on your dashboard.</div>
   <div class="voicecards" id="voiceCards"></div>
-</div>
-
-<!-- ============ Data pack (simplified) ============ -->
-<div class="overlay" id="dataOverlay" role="dialog" aria-modal="true" aria-label="Source data pack">
-  <div class="modal">
-    <h2>The data pack — everything the agent knows</h2>
-    <p class="modal-sub">Set on Wednesday, 23 September 2026. Aria uses only this — no invented flights, fares or policies.</p>
-
-    <h3>Three passengers</h3>
-    <div class="tilegrid">
-      <div class="mtile"><div class="t">Priya Nair · Gold · SK4821X</div><p>SK-204 Delhi → Goa, 18:40 — <b>cancelled</b> (operational). Return Fri 25 Sep unaffected.</p></div>
-      <div class="mtile"><div class="t">Arvind Kulkarni · Silver · TR1190B</div><p>SK-118 Mumbai → Bengaluru, 07:10 — <b>delayed 4h</b> (new 11:10).</p></div>
-      <div class="mtile"><div class="t">Meher Kaur · Platinum · WL7742</div><p>SK-305 Delhi → Hyderabad, 14:00 — <b>delayed 6h</b> (new 20:00).</p></div>
-      <div class="mtile"><div class="t">Contact &amp; history</div><p>Each profile carries email, phone and 12-month travel history — shown on your dashboard after sign-in.</p></div>
-    </div>
-
-    <h3>Five service rules</h3>
-    <div class="tilegrid">
-      <div class="mtile"><div class="t">Cancellation</div><p>Airline-caused → free rebooking within 24h <b>or</b> full refund. Customer’s choice.</p></div>
-      <div class="mtile"><div class="t">Delay compensation</div><p>&lt;3h: ₹500 meal voucher · &gt;3h: + lounge · &gt;5h: + hotel for the delayed hours only.</p></div>
-      <div class="mtile"><div class="t">Refunds</div><p>In full, within 7 business days, original payment method only.</p></div>
-      <div class="mtile"><div class="t">Fare difference</div><p>Voluntary move to a pricier flight → customer pays. Above ₹1,500 only a supervisor can waive.</p></div>
-      <div class="mtile" style="grid-column:1/-1"><div class="t">Loyalty</div><p>Gold &amp; Platinum board the rebooking queue first — but no extra compensation beyond policy.</p></div>
-    </div>
-
-    <h3>Allowed vs. must-escalate</h3>
-    <div class="chiprow">
-      <span class="pill" style="background:var(--good-bg);color:var(--good)">✓ Rebook free (cancellations)</span>
-      <span class="pill" style="background:var(--good-bg);color:var(--good)">✓ Vouchers · lounge · hotel per rule</span>
-      <span class="pill" style="background:var(--good-bg);color:var(--good)">✓ Start refunds</span>
-      <span class="pill" style="background:var(--good-bg);color:var(--good)">✓ Own booking info</span>
-    </div>
-    <div class="chiprow">
-      <span class="pill" style="background:var(--bad-bg);color:var(--bad)">✕ Anything beyond policy</span>
-      <span class="pill" style="background:var(--bad-bg);color:var(--bad)">✕ Waive &gt; ₹1,500</span>
-      <span class="pill" style="background:var(--bad-bg);color:var(--bad)">✕ Non-airline causes</span>
-      <span class="pill" style="background:var(--bad-bg);color:var(--bad)">✕ Legal threats — escalate instantly</span>
-      <span class="pill" style="background:var(--bad-bg);color:var(--bad)">✕ Refund to a different card</span>
-    </div>
-
-    <div class="modal-close-row"><button class="btn btn-primary" id="dataClose" type="button">Close</button></div>
-  </div>
 </div>
 
 <!-- ============ How it works (simplified) ============ -->
