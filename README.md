@@ -4,6 +4,11 @@ Assignment 3 (AIONOS) — a customer-facing resolution agent for a day of airlin
 set on **Wednesday, 23 September 2026**, grounded **only** in the assignment data pack.
 No invented rules, policies or customer data.
 
+**🔴 Live:** https://customer-resolution-agent-ica7.onrender.com — full product: Groq GPT-OSS 120B
+agent chat, two-way voice (Whisper ears · Orpheus voice), boarding-pass flight selection, and the
+`/admin` supervisor console with decisions flowing back into customer chats. Free instance — the
+first visit after a quiet spell takes ~1 minute to wake.
+
 ## Deploy (full functionality)
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/utkarshalpha/customer-resolution-agent)
