@@ -306,6 +306,20 @@ function json(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+function readRawBody(req, cap) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', c => {
+      size += c.length;
+      if (size > cap) { reject(new Error('body too large')); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -482,6 +496,48 @@ const server = http.createServer(async (req, res) => {
         return res.end(buf);
       } catch (e) {
         return json(res, 503, { error: 'TTS unavailable' });
+      }
+    }
+
+    /* Speech-to-text for voice mode — Groq Whisper, proxied so the key stays
+       server-side. The client records mic audio and posts the blob here. */
+    if (req.method === 'POST' && url.pathname === '/api/stt') {
+      const key = process.env.GROQ_API_KEY;
+      if (!key) return json(res, 503, { error: 'no STT provider configured' });
+      let audio;
+      try { audio = await readRawBody(req, 12_000_000); }
+      catch (e) { return json(res, 413, { error: 'audio too large' }); }
+      if (!audio || audio.length < 200) return json(res, 400, { error: 'no audio received' });
+      const ctype = String(req.headers['content-type'] || 'audio/webm').split(';')[0].trim();
+      const ext = ctype.includes('wav') ? 'wav' : ctype.includes('ogg') ? 'ogg' : ctype.includes('mp4') ? 'mp4' : 'webm';
+      try {
+        const boundary = '----skvoice' + crypto.randomBytes(10).toString('hex');
+        const head = Buffer.from(
+          '--' + boundary + '\r\n' +
+          'Content-Disposition: form-data; name="file"; filename="audio.' + ext + '"\r\n' +
+          'Content-Type: ' + ctype + '\r\n\r\n');
+        const tail = Buffer.from(
+          '\r\n--' + boundary + '\r\n' +
+          'Content-Disposition: form-data; name="model"\r\n\r\n' +
+          'whisper-large-v3-turbo\r\n' +
+          '--' + boundary + '\r\n' +
+          'Content-Disposition: form-data; name="language"\r\n\r\n' +
+          'en\r\n' +
+          '--' + boundary + '--\r\n');
+        const up = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'multipart/form-data; boundary=' + boundary },
+          body: Buffer.concat([head, audio, tail])
+        });
+        if (!up.ok) {
+          const msg = (await up.text()).slice(0, 200);
+          console.warn('[stt unavailable]', up.status, msg);
+          return json(res, 503, { error: 'STT unavailable' });
+        }
+        const data = await up.json();
+        return json(res, 200, { text: String(data.text || '').trim() });
+      } catch (e) {
+        return json(res, 503, { error: 'STT unavailable' });
       }
     }
 

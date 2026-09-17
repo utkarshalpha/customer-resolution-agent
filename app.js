@@ -798,9 +798,107 @@
     return recog;
   }
 
-  function maybeListen() {
-    if (!voiceOn || busy || micBlocked || listening) return;
+  /* Whisper path (preferred when the server is up): record the mic, detect the
+     end of the sentence by silence, transcribe via /api/stt (Groq Whisper). */
+  var micStream = null;
+  var whisper = { active: false, rec: null, chunks: [], timer: null, heard: false, silentMs: 0, discard: false, ctx: null, analyser: null };
+
+  function stopWhisper(discard) {
+    if (whisper.timer) { clearInterval(whisper.timer); whisper.timer = null; }
+    whisper.active = false;
+    $('voiceOverlay').classList.remove('listening');
+    if (whisper.rec && whisper.rec.state !== 'inactive') {
+      whisper.discard = !!discard;
+      try { whisper.rec.stop(); } catch (e) {}
+    }
+  }
+
+  async function startWhisperListen() {
+    if (!voiceOn || busy || micBlocked || whisper.active) return;
     if ($('voiceOverlay').classList.contains('speaking')) return;
+    if (!(navigator.mediaDevices && window.MediaRecorder)) { startSRListen(); return; }
+    try {
+      if (!micStream || !micStream.active) micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      micBlocked = true;
+      $('voiceStatus').textContent = 'Mic access blocked — allow the microphone (🔒 in the address bar), then tap the mic again';
+      return;
+    }
+    if (!voiceOn || busy || whisper.active) return; // state may have moved while the permission prompt was up
+    try {
+      if (!whisper.ctx) {
+        whisper.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var src = whisper.ctx.createMediaStreamSource(micStream);
+        whisper.analyser = whisper.ctx.createAnalyser();
+        whisper.analyser.fftSize = 512;
+        src.connect(whisper.analyser);
+      }
+      if (whisper.ctx.state === 'suspended') whisper.ctx.resume();
+    } catch (e) { /* level meter unavailable — fall back to fixed-length capture */ }
+
+    whisper.chunks = []; whisper.heard = false; whisper.silentMs = 0; whisper.discard = false; whisper.active = true;
+    var mime = MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '';
+    whisper.rec = new MediaRecorder(micStream, mime ? { mimeType: mime } : undefined);
+    whisper.rec.ondataavailable = function (ev) { if (ev.data && ev.data.size) whisper.chunks.push(ev.data); };
+    whisper.rec.onstop = function () {
+      var chunks = whisper.chunks; whisper.chunks = [];
+      if (whisper.discard) return;
+      if (!whisper.heard || !chunks.length) { if (voiceOn && !busy) setTimeout(maybeListen, 300); return; }
+      sendForTranscription(new Blob(chunks, { type: (whisper.rec && whisper.rec.mimeType) || 'audio/webm' }));
+    };
+    whisper.rec.start();
+    $('voiceOverlay').classList.add('listening');
+    $('voiceStatus').textContent = 'Listening — just speak';
+    var buf = new Uint8Array(whisper.analyser ? whisper.analyser.fftSize : 0);
+    var started = Date.now();
+    whisper.timer = setInterval(function () {
+      if (!whisper.active) return;
+      if (whisper.analyser) {
+        whisper.analyser.getByteTimeDomainData(buf);
+        var sum = 0;
+        for (var i = 0; i < buf.length; i++) { var dv = buf[i] - 128; sum += dv * dv; }
+        var rms = Math.sqrt(sum / buf.length);
+        if (rms > 6) {
+          if (!whisper.heard) $('voiceStatus').textContent = 'I can hear you…';
+          whisper.heard = true; whisper.silentMs = 0;
+        } else if (whisper.heard) {
+          whisper.silentMs += 120;
+          if (whisper.silentMs >= 1300) { stopWhisper(false); return; }
+        }
+      } else {
+        whisper.heard = true; // no level meter — take a fixed 6s clip
+        if (Date.now() - started > 6000) { stopWhisper(false); return; }
+      }
+      if (Date.now() - started > 20000) {
+        var h = whisper.heard;
+        stopWhisper(!h); // heard → onstop transcribes; silent → discard and re-arm
+        if (!h && voiceOn && !busy) setTimeout(maybeListen, 300);
+      }
+    }, 120);
+  }
+
+  async function sendForTranscription(blob) {
+    $('voiceStatus').textContent = 'Got it — writing that down…';
+    try {
+      var r = await fetch('/api/stt', { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
+      if (!r.ok) throw new Error('stt ' + r.status);
+      var data = await r.json();
+      var text = (data.text || '').replace(/^["'“”‘’\s]+|["'“”‘’\s]+$/g, '');
+      if (!text || text.length < 2) {
+        $('voiceStatus').textContent = 'I didn’t catch that — say it once more';
+        setTimeout(maybeListen, 600);
+        return;
+      }
+      $('voiceText').textContent = '“' + text + '”';
+      $('voiceStatus').textContent = 'Aria is thinking';
+      submitMessage(text);
+    } catch (e) {
+      $('voiceStatus').textContent = 'Couldn’t hear that clearly — try again';
+      setTimeout(maybeListen, 900);
+    }
+  }
+
+  function startSRListen() {
     var r = ensureRecog();
     if (!r) { $('voiceStatus').textContent = 'Voice replies are on — type in the chat to talk'; return; }
     try {
@@ -811,9 +909,16 @@
     } catch (e) { listening = false; }
   }
 
+  function maybeListen() {
+    if (!voiceOn || busy || micBlocked || listening || whisper.active) return;
+    if ($('voiceOverlay').classList.contains('speaking')) return;
+    if (serverMode) startWhisperListen();
+    else startSRListen();
+  }
+
   function stopListening() {
     listening = false;
-    $('voiceOverlay').classList.remove('listening');
+    stopWhisper(true);
     if (recog) { try { recog.abort(); } catch (e) {} }
   }
 
