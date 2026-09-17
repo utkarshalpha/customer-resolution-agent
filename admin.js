@@ -8,12 +8,12 @@
     return d.innerHTML;
   }
 
-  async function markHandled(caseId, ticketId) {
+  async function decide(caseId, ticketId, decision) {
     try {
-      await fetch('/api/handle', {
+      await fetch('/api/decide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ caseId: caseId, ticketId: ticketId })
+        body: JSON.stringify({ caseId: caseId, ticketId: ticketId, decision: decision })
       });
     } catch (e) { /* next refresh will show reality */ }
     refresh();
@@ -42,12 +42,17 @@
         : '<span class="tier tier-silver">Unverified customer</span>';
       var tickets = c.tickets.length
         ? c.tickets.map(function (t) {
+            var tail;
+            if (t.handled) {
+              var tag = t.decision ? t.decision.toUpperCase() : 'HANDLED';
+              tail = '<span class="handled-tag"' + (t.decision === 'denied' ? ' style="color:var(--bad)"' : '') + '>' + esc(tag) + '</span>';
+            } else {
+              tail = '<button class="btn btn-sm btn-primary" data-case="' + esc(c.caseId) + '" data-ticket="' + esc(t.id) + '" data-decision="approved">Approve</button>' +
+                     '<button class="btn btn-sm" data-case="' + esc(c.caseId) + '" data-ticket="' + esc(t.id) + '" data-decision="denied">Deny</button>';
+            }
             return '<div class="ticket' + (t.handled ? ' handled' : '') + '">' +
               '<span class="id">' + esc(t.id) + '</span>' +
-              '<span class="grow">' + esc(t.label) + '</span>' +
-              (t.handled
-                ? '<span class="handled-tag">HANDLED</span>'
-                : '<button class="btn btn-sm" data-case="' + esc(c.caseId) + '" data-ticket="' + esc(t.id) + '">Mark handled</button>') +
+              '<span class="grow">' + esc(t.label) + '</span>' + tail +
               '</div>';
           }).join('')
         : '<p class="empty" style="padding:4px 0">None</p>';
@@ -69,7 +74,7 @@
     }).join('');
 
     list.querySelectorAll('button[data-ticket]').forEach(function (b) {
-      b.addEventListener('click', function () { markHandled(b.dataset.case, b.dataset.ticket); });
+      b.addEventListener('click', function () { decide(b.dataset.case, b.dataset.ticket, b.dataset.decision); });
     });
   }
 

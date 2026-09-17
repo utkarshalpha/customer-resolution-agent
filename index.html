@@ -207,7 +207,7 @@
       <li><strong>Escalation model</strong> — out-of-policy requests are declined with the reason and an in-policy alternative, and escalated to a human on insistence (immediately for legal threats). The agent never approves beyond policy and never promises an escalation’s outcome.</li>
       <li><strong>Identity flow</strong> — the “New customer” entry starts unverified: the agent asks for a booking reference and calls <span class="mono">verify_identity</span>; no account data exists for it until that succeeds, and it never re-asks for what verification returns.</li>
       <li><strong>Knowledge base</strong> — the pack’s service rules live in a retrievable KB; the agent’s <span class="mono">search_policy</span> tool returns the verbatim rule text with section ids, which the console logs as KB retrievals.</li>
-      <li><strong>Cases &amp; human-in-the-loop</strong> — every conversation gets a Case ID and an audit ledger; escalation tickets land in the <a href="/admin" target="_blank" rel="noopener">support console</a>, where a human can review and mark them handled.</li>
+      <li><strong>Cases &amp; human-in-the-loop</strong> — every conversation gets a Case ID and an audit ledger; escalation tickets land in the <a href="admin.html" target="_blank" rel="noopener">Resolution Console</a>, where a supervisor can <em>approve or deny</em> them. The decision flows back into the live chat — an approved ₹2,000 fare waiver executes the free rebooking through the same policy layer and the customer sees the update within seconds.</li>
     </ul>
 
     <h3>Build phases</h3>

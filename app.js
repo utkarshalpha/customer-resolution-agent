@@ -361,7 +361,26 @@
     }
     renderTrace(out, turnLabel);
     renderLedger(out);
-    renderChips(out.chips);
+    if (out.chips) renderChips(out.chips); // supervisor notices carry no chips — keep the current ones
+  }
+
+  /* ---------- supervisor updates (human-in-the-loop) ---------- */
+
+  async function pollNotices() {
+    if (!session || session.kind !== 'api' || busy) return;
+    try {
+      var r = await fetch('/api/notices?sessionId=' + encodeURIComponent(session.id));
+      if (!r.ok) return;
+      var data = await r.json();
+      var notices = data.notices || [];
+      if (!notices.length) return;
+      setBusy(true);
+      for (var i = 0; i < notices.length; i++) {
+        await renderAgentTurn(notices[i], 'Supervisor decision · Resolution Console', 200);
+      }
+      if (data.fullEscalated) $('escBanner').classList.add('show');
+      setBusy(false);
+    } catch (e) { /* server briefly unreachable — next poll retries */ }
   }
 
   /* ---------- message flow ---------- */
@@ -474,6 +493,8 @@
         $('howOverlay').classList.remove('show');
       }
     });
+
+    setInterval(pollNotices, 4000);
 
     // Everything above is interactive immediately; mode detection (and the
     // keyless-LLM probe on static hosting) runs after, capped at ~8s.

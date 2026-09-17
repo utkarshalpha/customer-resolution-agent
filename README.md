@@ -63,17 +63,31 @@ suggested replies, or **Watch scenario** to run the full §6 script end-to-end.
   *verified customer's* profile and bookings (other passengers' data is never in its
   context), the five §3 service rules, the §4 allowed/prohibited boundary, and the §5 tone
   samples.
-- **Every action goes through six tools** enforced by a deterministic policy layer the model
-  cannot bypass (`policy.js`): `issue_delay_compensation`, `rebook_free`, `initiate_refund`,
-  `quote_fare_difference`, `rebook_paid_alternative`, `escalate_to_human`. A disallowed call
-  (hotel for a 4-hour delay, refund on a delayed flight, paid rebooking without an accepted
-  quote) returns a policy error with the rule, which the agent must relay and escalate.
-  The only fare figure the model can quote is what `quote_fare_difference` returns.
+- **Every action goes through nine tools** enforced by a deterministic policy layer the model
+  cannot bypass (`policy.js`): `verify_identity`, `search_policy`, `get_booking_details`,
+  `issue_delay_compensation`, `rebook_free`, `initiate_refund`, `quote_fare_difference`,
+  `rebook_paid_alternative`, `escalate_to_human`. A disallowed call (hotel for a 4-hour
+  delay, refund on a delayed flight, paid rebooking without an accepted quote) returns a
+  policy error with the rule, which the agent must relay and escalate. The only fare figure
+  the model can quote is what `quote_fare_difference` returns.
+- **Agentic identity flow** — the "New customer" entry starts unverified: the agent asks what
+  happened, collects the booking reference, and calls `verify_identity`; no account data
+  exists in its context until that succeeds, and it never re-asks for what verification
+  returns.
+- **Knowledge base** — the pack's service rules live in a retrievable KB (`kb.js`);
+  `search_policy` returns the verbatim rule text with section ids, logged as KB retrievals
+  in the console.
 - **Legal threats** additionally trip a server-side guard that forces immediate escalation
   before any further resolution.
 - The **Agent console** beside the chat shows the live audit: every tool call, the rule check
   behind it (Allowed / Blocked / Supervisor / Escalated), the action ledger and escalation
-  tickets.
+  tickets. Every conversation gets a **Case ID**; turns that change the booking render a
+  resolution summary card.
+- **Human-in-the-loop, closed loop** — open `/admin` (running `node server.js`) for the
+  Resolution Console: all cases and open escalations with **Approve / Deny**. The decision
+  flows back into the live customer chat within seconds — an approved ₹2,000 fare waiver
+  executes the free rebooking through the same policy layer (`RBK-…: fare difference WAIVED
+  by supervisor approval`).
 
 ### Rules mode — the fallback
 

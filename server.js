@@ -170,6 +170,50 @@ function rulesUnboundTurn(entry, text) {
   return out;
 }
 
+/* Build the customer-facing update for a supervisor decision. For an approved
+   fare-difference waiver, the rebooking actually executes through the policy
+   layer (state.waiverApproved) — closing the human-in-the-loop circle. */
+function buildDecisionNotice(entry, ticket, decision) {
+  const out = { parts: [], trace: [], actions: [], escalations: [] };
+  const state = entry.state;
+  const isWaiver = /waiver/i.test(ticket.label);
+  out.trace.push({
+    rule: 'Supervisor decision',
+    detail: ticket.id + ' → ' + decision.toUpperCase() + ' (Resolution Console)',
+    verdict: decision === 'approved' ? 'supervisor' : 'blocked'
+  });
+
+  if (isWaiver && state && state.customer) {
+    const diff = Engine.DATA.fareDifference[state.customer.id];
+    const amount = typeof diff === 'number' ? '₹' + diff.toLocaleString('en-IN') : 'the fare difference';
+    if (decision === 'approved') {
+      state.waiverApproved = true;
+      if (state.fareOffered) state.fareQuoted = true; // rules-engine sessions track the quote as fareOffered
+      const result = policy.executeTool(state, out, 'rebook_paid_alternative', { customer_accepted_fare: false });
+      if (result.allowed && result.already_done) {
+        out.parts.push('Supervisor update on ticket ' + ticket.id + ': your ' + amount + ' fare-difference waiver has been APPROVED. Since you had already chosen to pay, the ' + amount + ' will be refunded to your original payment method.');
+      } else if (result.allowed) {
+        out.parts.push('Supervisor update on ticket ' + ticket.id + ': your ' + amount + ' fare-difference waiver has been APPROVED — I’ve moved you onto the alternative flight at no extra charge. Confirmation is on its way to ' + state.customer.email + '.');
+      } else {
+        out.parts.push('Supervisor update on ticket ' + ticket.id + ': your ' + amount + ' fare-difference waiver has been APPROVED. A colleague will complete the rebooking and confirm by email.');
+      }
+    } else {
+      out.parts.push('Supervisor update on ticket ' + ticket.id + ': the fare-difference waiver was reviewed and can’t be approved — ' + amount + ' remains payable. You can pay it and be moved right away, or stay on your current flight with your delay assistance in place.');
+    }
+  } else {
+    out.parts.push(decision === 'approved'
+      ? 'Update on ticket ' + ticket.id + ': our support team has APPROVED your request — a colleague will complete it and confirm by email shortly.'
+      : 'Update on ticket ' + ticket.id + ': our support team reviewed your request, and it can’t be approved beyond the standard policy. Everything you’re already entitled to stays in place.');
+  }
+
+  recordLedger(entry, out);
+  if (entry.mode === 'ai' && state) {
+    // keep the model's history consistent with what the customer was shown
+    state.messages.push({ role: 'assistant', content: out.parts.join('\n\n') });
+  }
+  return out;
+}
+
 /* ---------- helpers ---------- */
 
 function json(res, code, obj) {
@@ -237,7 +281,7 @@ const server = http.createServer(async (req, res) => {
       }
       const entry = {
         caseId, mode: RUNTIME.mode, provider: RUNTIME.provider, providerObj: RUNTIME.providerObj,
-        state, actions: [], tickets: [], createdAt: new Date().toISOString(), forceEscalated: false
+        state, actions: [], tickets: [], notices: [], createdAt: new Date().toISOString(), forceEscalated: false
       };
       sessions.set(id, entry);
       return json(res, 200, {
@@ -311,6 +355,35 @@ const server = http.createServer(async (req, res) => {
       }
       cases.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
       return json(res, 200, { cases });
+    }
+
+    /* Supervisor decision from the console — flows back into the customer chat. */
+    if (req.method === 'POST' && url.pathname === '/api/decide') {
+      const body = await readBody(req);
+      const decision = body.decision === 'approved' ? 'approved' : 'denied';
+      for (const entry of sessions.values()) {
+        if (entry.caseId !== String(body.caseId || '')) continue;
+        const t = entry.tickets.find(x => x.id === String(body.ticketId || ''));
+        if (!t) return json(res, 404, { error: 'ticket not found' });
+        if (!t.handled) {
+          t.handled = true;
+          t.decision = decision;
+          entry.notices.push(buildDecisionNotice(entry, t, decision));
+        }
+        return json(res, 200, { ok: true });
+      }
+      return json(res, 404, { error: 'case not found' });
+    }
+
+    /* The customer UI polls this for supervisor updates. */
+    if (req.method === 'GET' && url.pathname === '/api/notices') {
+      const entry = sessions.get(String(url.searchParams.get('sessionId') || ''));
+      if (!entry) return json(res, 404, { error: 'unknown session' });
+      const notices = entry.notices.splice(0);
+      return json(res, 200, {
+        notices,
+        fullEscalated: Boolean((entry.state && entry.state.fullEscalated) || entry.forceEscalated)
+      });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/handle') {

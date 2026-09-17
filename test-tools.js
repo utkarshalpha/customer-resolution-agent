@@ -61,6 +61,13 @@ check('no acceptance → no rebooking, supervisor path named', r.result.allowed 
 r = call(m, 'rebook_paid_alternative', { customer_accepted_fare: true });
 check('accepted → moved with Platinum priority', r.result.allowed === true && m.fareRebooked === true);
 
+let mw = agent.createAiSession('meher');
+call(mw, 'quote_fare_difference');
+mw.waiverApproved = true;
+r = call(mw, 'rebook_paid_alternative', { customer_accepted_fare: false });
+check('supervisor waiver → free rebooking executes', r.result.allowed === true && r.result.fare_waived_by_supervisor === true && r.result.fare_difference_inr === 0);
+check('waiver action labelled as waived', r.out.actions[0].label.indexOf('WAIVED') !== -1);
+
 /* ---------------- Priya (Gold, cancelled) ---------------- */
 console.log('\nPolicy layer — Priya (cancelled)');
 let p = agent.createAiSession('priya');

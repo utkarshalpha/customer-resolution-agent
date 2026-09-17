@@ -439,11 +439,12 @@ function executeTool(state, out, name, input) {
       trace(out, '§3 Fare Difference Rule', 'No quoted alternative flight applies to this booking', 'blocked');
       return { allowed: false, reason: 'There is no quoted alternative flight for this booking.' };
     }
-    if (!state.fareQuoted) {
+    if (!state.fareQuoted && !state.waiverApproved) {
       trace(out, 'Policy layer', 'rebook_paid_alternative called before quote_fare_difference — rejected', 'blocked');
       return { allowed: false, reason: 'Quote the fare difference first (quote_fare_difference) and get the customer’s explicit agreement to pay it.' };
     }
-    if (input.customer_accepted_fare !== true) {
+    const waived = state.waiverApproved === true;
+    if (input.customer_accepted_fare !== true && !waived) {
       trace(out, '§3 Fare Difference Rule', 'Customer has not agreed to pay ₹' + diff.toLocaleString('en-IN') + ' — cannot proceed; waiver needs a supervisor', 'blocked');
       return { allowed: false, reason: 'The customer has not agreed to pay the ₹' + diff.toLocaleString('en-IN') + ' fare difference. You cannot waive it (above your ₹1,500 limit). Offer: pay and move, supervisor waiver review (escalate_to_human), or stay on ' + d.flight + '.' };
     }
@@ -452,14 +453,23 @@ function executeTool(state, out, name, input) {
       return { allowed: true, already_done: true };
     }
     state.fareRebooked = true;
-    trace(out, '§3 Fare Difference Rule', 'Customer accepted the ₹' + diff.toLocaleString('en-IN') + ' fare difference → rebooking proceeds', 'allowed');
+    if (waived) {
+      trace(out, '§3 Fare Difference Rule', 'Supervisor approved the ₹' + diff.toLocaleString('en-IN') + ' waiver → rebooking proceeds at no charge', 'supervisor');
+    } else {
+      trace(out, '§3 Fare Difference Rule', 'Customer accepted the ₹' + diff.toLocaleString('en-IN') + ' fare difference → rebooking proceeds', 'allowed');
+    }
     const priority = (c.tier === 'Gold' || c.tier === 'Platinum');
     if (priority) trace(out, '§3 Loyalty Tier Rule', c.tier + ' → priority rebooking, no additional compensation', 'allowed');
-    action(out, state, 'rbk', 'Moved to the higher-fare alternative flight — ₹' + diff.toLocaleString('en-IN') + ' fare difference payable' + (priority ? ', ' + c.tier + ' priority' : ''));
+    action(out, state, 'rbk', waived
+      ? 'Moved to the higher-fare alternative flight — ₹' + diff.toLocaleString('en-IN') + ' fare difference WAIVED by supervisor approval' + (priority ? ', ' + c.tier + ' priority' : '')
+      : 'Moved to the higher-fare alternative flight — ₹' + diff.toLocaleString('en-IN') + ' fare difference payable' + (priority ? ', ' + c.tier + ' priority' : ''));
     return {
       allowed: true,
-      fare_difference_inr: diff,
-      note: 'Moved to the alternative flight' + (priority ? ' with ' + c.tier + ' priority' : '') + '. The ₹' + diff.toLocaleString('en-IN') + ' fare difference is payable before ticketing; confirmation goes to ' + c.email + '. Any delayed-hours hotel is released once rebooked; the meal voucher stays valid.'
+      fare_difference_inr: waived ? 0 : diff,
+      fare_waived_by_supervisor: waived,
+      note: 'Moved to the alternative flight' + (priority ? ' with ' + c.tier + ' priority' : '') + '. ' + (waived
+        ? 'The ₹' + diff.toLocaleString('en-IN') + ' fare difference was waived under supervisor approval — nothing to pay.'
+        : 'The ₹' + diff.toLocaleString('en-IN') + ' fare difference is payable before ticketing.') + ' Confirmation goes to ' + c.email + '. Any delayed-hours hotel is released once rebooked; the meal voucher stays valid.'
     };
   }
 
