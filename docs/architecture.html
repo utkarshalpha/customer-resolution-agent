@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer Resolution Agent — Architecture</title>
+<style>
+  :root {
+    --indigo: #001871; --link: #2447c5; --ink: #1f2533; --muted: #5b6472;
+    --line: #e1e6f0; --panel: #f5f7fb;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+    color: var(--ink); background: #fff; font-size: 12.5px; line-height: 1.5;
+  }
+  .page { max-width: 860px; margin: 0 auto; padding: 34px 40px; }
+  @media print {
+    @page { margin: 12mm; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { page-break-after: always; padding: 0; max-width: none; }
+    .page:last-child { page-break-after: auto; }
+  }
+  h1 { font-size: 21px; font-weight: 650; letter-spacing: -0.01em; color: var(--indigo); }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 3px 0 16px; }
+  h2 {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--link); margin: 16px 0 7px;
+  }
+  p { margin-bottom: 6px; }
+  b { font-weight: 650; }
+  code {
+    font-family: Consolas, "Cascadia Mono", monospace; font-size: 11px;
+    background: var(--panel); padding: 0 4px; border-radius: 3px;
+  }
+  .principle {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 4px 0 2px;
+  }
+  .principle div {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--indigo);
+    border-radius: 6px; padding: 7px 10px; font-size: 11.5px;
+  }
+  .principle b { display: block; color: var(--indigo); font-size: 11.5px; }
+  .stack { display: grid; grid-template-columns: 1fr 200px; gap: 14px; align-items: start; margin-top: 4px; }
+  .layers { display: flex; flex-direction: column; gap: 0; }
+  .layer {
+    border: 1px solid var(--line); border-radius: 7px; padding: 6px 12px;
+    background: #fff; display: flex; gap: 10px; align-items: baseline;
+  }
+  .layer b { color: var(--indigo); white-space: nowrap; font-size: 12px; }
+  .layer span { color: var(--muted); font-size: 11.5px; }
+  .down { text-align: center; color: var(--muted); font-size: 11px; line-height: 1.1; padding: 1px 0; }
+  .side {
+    border: 1px dashed var(--link); border-radius: 7px; padding: 8px 11px;
+    background: var(--panel); font-size: 11.5px; color: var(--ink);
+  }
+  .side b { color: var(--indigo); display: block; margin-bottom: 3px; }
+  ul { padding-left: 18px; margin-bottom: 6px; }
+  li { margin-bottom: 3.5px; }
+  .kv { color: var(--muted); }
+  .talk { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-top: 12px; }
+  .talk li { margin-bottom: 5px; }
+  svg { width: 100%; height: auto; display: block; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<!-- ==================== PAGE 1 — ARCHITECTURE ==================== -->
+<section class="page">
+  <h1>Customer Resolution Agent — Architecture</h1>
+  <p class="sub">Airline disruption resolution (AIONOS Assignment 3) · grounded only in the supplied data pack · Node.js, zero-dependency core</p>
+
+  <h2>Core principle</h2>
+  <div class="principle">
+    <div><b>LLM</b>conversation &amp; reasoning</div>
+    <div><b>Tools</b>retrieve facts, execute actions</div>
+    <div><b>Policy engine</b>enforces rules in code</div>
+    <div><b>Human handoff</b>safety boundary</div>
+  </div>
+  <p class="kv" style="margin-top:6px">The model never decides entitlements. It requests actions; deterministic code computes eligibility from the data pack and either executes or returns the blocking rule, which the agent must relay and escalate.</p>
+
+  <h2>System layers</h2>
+  <div class="stack">
+    <div class="layers">
+      <div class="layer"><b>1 · Chat UI</b><span>chat + suggested replies · live policy trace console · action ledger · Case-ID chip · resolution cards <code>index.html app.js</code></span></div>
+      <div class="down">▼ &nbsp;REST (/api/session · /api/message · /api/cases)</div>
+      <div class="layer"><b>2 · API server</b><span>session store · Case IDs (CASE-20260923-NNNN) · audit ledger · provider auto-detection <code>server.js</code></span></div>
+      <div class="down">▼ &nbsp;one behaviour contract, two runners</div>
+      <div class="layer"><b>3 · Agent runtime</b><span>tool-use loop: model → tool → result → repeat · legal-threat guard · retries <code>agent.js agent-openai.js</code></span></div>
+      <div class="down">▼ &nbsp;9 strict-schema tools — the only way to act</div>
+      <div class="layer"><b>4 · Policy engine</b><span>deterministic rule checks the model cannot bypass · identity gate · idempotent actions · trace events <code>policy.js</code></span></div>
+      <div class="down">▼ &nbsp;verbatim retrieval, verified customer only</div>
+      <div class="layer"><b>5 · Knowledge &amp; data</b><span>§3/§4 rules as retrievable chunks with section ids · customers/bookings as seed data <code>kb.js engine.js</code></span></div>
+    </div>
+    <div>
+      <div class="side"><b>Human-in-the-loop</b>Support console: every case with its ledger and escalation tickets (beyond-policy asks, ₹1,500+ waivers, legal threats). A person reviews and marks tickets handled. <code>admin.html</code></div>
+      <div class="side" style="margin-top:10px"><b>LLM providers</b>Auto-detected at startup: Claude → Groq → Gemini → OpenRouter → custom → keyless free endpoint → rules engine. The demo always runs, key or no key.</div>
+      <div class="side" style="margin-top:10px"><b>Verification</b>91 automated checks: 56 scenario/guardrail + 35 policy-layer. No API key needed. <code>npm test</code></div>
+    </div>
+  </div>
+
+  <h2>The nine tools (policy-enforced)</h2>
+  <p><code>verify_identity</code> <code>search_policy</code> <code>get_booking_details</code> · <code>issue_delay_compensation</code> <code>rebook_free</code> <code>initiate_refund</code> <code>quote_fare_difference</code> <code>rebook_paid_alternative</code> · <code>escalate_to_human</code></p>
+
+  <h2>Rules enforced in code (from the data pack)</h2>
+  <ul>
+    <li><b>Delay tiers:</b> &lt;3h → ₹500 meal voucher · &gt;3h → + lounge access · &gt;5h → + hotel for the <i>delayed hours only</i>, never a full night.</li>
+    <li><b>Cancellation:</b> customer's choice — free rebooking within 24h (Gold/Platinum priority) or full refund in 7 business days, original payment method only.</li>
+    <li><b>Fare difference:</b> voluntary move to a higher fare is payable; above ₹1,500 the agent cannot waive — supervisor escalation (Meher's ₹2,000 case).</li>
+    <li><b>Loyalty:</b> priority rebooking only — no extra compensation; free upgrades are beyond policy → escalated, never approved.</li>
+    <li><b>Hard boundaries:</b> legal threats escalate immediately; non-airline disruptions get no exceptions; unverified sessions cannot touch any account action.</li>
+  </ul>
+</section>
+
+<!-- ==================== PAGE 2 — SEQUENCE DIAGRAM ==================== -->
+<section class="page">
+  <h1>Sequence — identity → grounded resolution → guardrail → human</h1>
+  <p class="sub">Priya's scenario end-to-end: verification, in-policy refund executed, beyond-policy upgrade escalated. Solid = call · dashed = response.</p>
+
+  <svg viewBox="0 0 1000 880" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#1f2533"/>
+      </marker>
+      <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#5b6472"/>
+      </marker>
+    </defs>
+
+    <!-- phase bands -->
+    <rect x="0" y="160" width="1000" height="342" fill="#f5f7fb"/>
+    <rect x="0" y="506" width="1000" height="262" fill="#eef2fc"/>
+    <rect x="0" y="772" width="1000" height="76" fill="#f5f7fb"/>
+    <text x="8" y="174" font-size="9" letter-spacing="1.5" fill="#2447c5" font-weight="700">IDENTITY &amp; GROUNDED RESOLUTION</text>
+    <text x="8" y="520" font-size="9" letter-spacing="1.5" fill="#2447c5" font-weight="700">GUARDRAIL — IN-POLICY EXECUTED, BEYOND-POLICY ESCALATED</text>
+    <text x="8" y="786" font-size="9" letter-spacing="1.5" fill="#2447c5" font-weight="700">HUMAN-IN-THE-LOOP</text>
+
+    <!-- lifelines -->
+    <g stroke="#99a3b8" stroke-dasharray="3 4">
+      <line x1="70"  y1="72" x2="70"  y2="850"/><line x1="240" y1="72" x2="240" y2="850"/>
+      <line x1="410" y1="72" x2="410" y2="850"/><line x1="580" y1="72" x2="580" y2="850"/>
+      <line x1="750" y1="72" x2="750" y2="850"/><line x1="930" y1="72" x2="930" y2="850"/>
+    </g>
+    <g font-size="11" font-weight="650" text-anchor="middle">
+      <rect x="18"  y="34" width="104" height="38" rx="6" fill="#001871"/><text x="70"  y="51" fill="#fff">Customer</text><text x="70" y="65" fill="#c9d4ee" font-size="9" font-weight="400">chat UI</text>
+      <rect x="188" y="34" width="104" height="38" rx="6" fill="#001871"/><text x="240" y="51" fill="#fff">API server</text><text x="240" y="65" fill="#c9d4ee" font-size="9" font-weight="400">server.js</text>
+      <rect x="358" y="34" width="104" height="38" rx="6" fill="#001871"/><text x="410" y="51" fill="#fff">Agent (LLM)</text><text x="410" y="65" fill="#c9d4ee" font-size="9" font-weight="400">tool-use loop</text>
+      <rect x="528" y="34" width="104" height="38" rx="6" fill="#001871"/><text x="580" y="51" fill="#fff">Policy engine</text><text x="580" y="65" fill="#c9d4ee" font-size="9" font-weight="400">policy.js</text>
+      <rect x="698" y="34" width="104" height="38" rx="6" fill="#001871"/><text x="750" y="51" fill="#fff">Knowledge</text><text x="750" y="65" fill="#c9d4ee" font-size="9" font-weight="400">kb.js · data</text>
+      <rect x="878" y="34" width="104" height="38" rx="6" fill="#001871"/><text x="930" y="51" fill="#fff">Human</text><text x="930" y="65" fill="#c9d4ee" font-size="9" font-weight="400">support console</text>
+    </g>
+
+    <!-- messages: solid = call, dashed = response -->
+    <g font-size="10.5" fill="#1f2533">
+      <line x1="70" y1="100" x2="238" y2="100" stroke="#1f2533" marker-end="url(#a)"/>
+      <text x="154" y="93" text-anchor="middle">POST /api/session (new customer)</text>
+
+      <line x1="240" y1="138" x2="72" y2="138" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
+      <text x="154" y="131" text-anchor="middle" fill="#5b6472">Case ID + unverified greeting</text>
+
+      <line x1="70" y1="192" x2="238" y2="192" stroke="#1f2533" marker-end="url(#a)"/>
+      <text x="154" y="185" text-anchor="middle">“Flight cancelled” + PNR SK4821X</text>
+
+      <line x1="240" y1="230" x2="408" y2="230" stroke="#1f2533" marker-end="url(#a)"/>
+      <text x="324" y="223" text-anchor="middle">run turn (unverified prompt)</text>
+
+      <line x1="410" y1="268" x2="578" y2="268" stroke="#1f2533" marker-end="url(#a)"/>
+      <text x="494" y="261" text-anchor="middle">verify_identity(“SK4821X”)</text>
+
+      <line x1="580" y1="306" x2="748" y2="306" stroke="#1f2533" marker-end="url(#a)"/>
+      <text x="664" y="299" text-anchor="middle">match booking · load profile</text>
+
+      <line x1="750" y1="344" x2="582" y2="344" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
+      <text x="664" y="337" text-anchor="middle" fill="#5b6472">Priya Nair · Gold · SK-204 cancelled</text>
+
+      <line x1="580" y1="382" x2="412" y2="382" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
+      <text x="494" y="375" text-anchor="middle" fill="#5b6472">allowed ✓ — customer bound</text>
+
+      <line x1="410" y1="420" x2="578" y2="420" stroke="#1f2533" marker-end="url(#a)"/>
+      <text x="494" y="413" text-anchor="middle">search_policy(“cancellation options”)</text>
+
+      <line x1="580" y1="452" x2="412" y2="452" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
+      <text x="494" y="445" text-anchor="middle" fill="#5b6472">verbatim §3 rule + section id</text>
+
+      <line x1="410" y1="488" x2="72" y2="488" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
+      <text x="240" y="481" text-anchor="middle" fill="#5b6472">“Free rebooking ≤24h or full refund — your choice”</text>
+
+      <line x1="70" y1="540" x2="408" y2="540" stroke="#1f2533" marker-end="url(#a)"/>
+      <text x="240" y="533" text-anchor="middle">“Refund — plus a free business-class upgrade” (via server)</text>
+
+      <line x1="410" y1="578" x2="578" y2="578" stroke="#1f2533" marker-end="url(#a)"/>
+      <text x="494" y="571" text-anchor="middle">initiate_refund()</text>
+
+      <line x1="580" y1="616" x2="412" y2="616" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
+      <text x="494" y="609" text-anchor="middle" fill="#5b6472">✓ RFD-9001 · 7 days · original method</text>
+
+      <line x1="410" y1="654" x2="578" y2="654" stroke="#1f2533" marker-end="url(#a)"/>
+      <text x="494" y="647" text-anchor="middle">escalate_to_human(beyond_policy)</text>
+
+      <line x1="580" y1="692" x2="412" y2="692" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
+      <text x="494" y="685" text-anchor="middle" fill="#5b6472">ticket ESC-7001 — upgrade never approved</text>
+
+      <line x1="410" y1="740" x2="72" y2="740" stroke="#5b6472" stroke-dasharray="5 4" marker-end="url(#ag)"/>
+      <text x="240" y="733" text-anchor="middle" fill="#5b6472">refund confirmed + upgrade escalated (resolution card, Case ID)</text>
+
+      <line x1="240" y1="800" x2="928" y2="800" stroke="#1f2533" marker-end="url(#a)"/>
+      <text x="584" y="793" text-anchor="middle">case + ESC-7001 appear in support console</text>
+
+      <line x1="930" y1="836" x2="242" y2="836" stroke="#1f2533" marker-end="url(#a)"/>
+      <text x="584" y="829" text-anchor="middle">mark ESC-7001 handled</text>
+    </g>
+
+    <text x="8" y="872" font-size="9.5" fill="#5b6472">Every arrow into the policy engine emits an audit event: policy trace (Allowed / Blocked / Supervisor / Escalated), ledger entry, or ticket — all tied to the Case ID.</text>
+  </svg>
+
+  <div class="talk">
+    <h2 style="margin-top:0">If you have to explain it in three sentences</h2>
+    <ul>
+      <li><b>The LLM never decides entitlements</b> — it requests tools; the policy engine computes eligibility from the data pack and either executes or returns the blocking rule (a hotel on a 4-hour delay is refused <i>by code</i>, with the “&gt;5 hours” rule attached).</li>
+      <li><b>Everything is auditable</b> — each turn emits a policy trace, ledger ids (VCH/LNG/HTL/RFD/RBK) and tickets (ESC), tied to a Case ID and visible live in both consoles.</li>
+      <li><b>Escalation is the boundary, not a failure</b> — beyond-policy asks, waivers above ₹1,500 and legal threats route to a human immediately; the agent never approves outside policy and never promises an outcome.</li>
+    </ul>
+  </div>
+</section>
+
+</body>
+</html>
